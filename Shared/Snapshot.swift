@@ -46,6 +46,18 @@ public struct DisplaySnapshot: Codable, Equatable {
         default: return "休眠"
         }
     }
+
+    /// 距最近确认记录默认超过 6 小时：卡片展示“休眠／等待同步”（执行文档 11.2）。
+    /// 仅展示口径，不据此判定系统故障。
+    public var isStale: Bool {
+        guard let at = lastSettlementAt else { return true } // 从未结算：等待同步
+        return Date().timeIntervalSince(at) > 6 * 3600
+    }
+
+    /// 卡片状态行：休眠优先于最近事件
+    public var widgetStatusText: String {
+        isStale ? "休眠 · 等待同步" : recentEvent
+    }
 }
 
 public enum SnapshotIO {

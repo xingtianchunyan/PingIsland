@@ -20,7 +20,7 @@ struct PingIslandSmallWidget: Widget {
             VStack(spacing: 4) {
                 Text("🏝️").font(.largeTitle)
                 Text("Lv.\(entry.snapshot.level)").font(.headline)
-                Text(entry.snapshot.recentEvent)
+                Text(entry.snapshot.widgetStatusText)
                     .font(.caption2)
                     .lineLimit(2)
                     .foregroundStyle(.secondary)
@@ -44,9 +44,9 @@ struct PingIslandMediumWidget: Widget {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(entry.snapshot.className).font(.headline)
                     Text("等级 \(entry.snapshot.level)").font(.subheadline)
-                    Text("状态：\(entry.snapshot.fatigueText)")
+                    Text(entry.snapshot.isStale ? "休眠 · 等待同步" : "状态：\(entry.snapshot.fatigueText)")
                         .font(.caption).foregroundStyle(.secondary)
-                    if let at = entry.snapshot.lastSettlementAt {
+                    if let at = entry.snapshot.lastSettlementAt, !entry.snapshot.isStale {
                         Text("最近结算 \(at.formatted(date: .omitted, time: .shortened))")
                             .font(.caption2).foregroundStyle(.tertiary)
                     }
@@ -77,9 +77,12 @@ struct SnapshotTimelineProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<SnapshotEntry>) -> Void) {
-        let entry = SnapshotEntry(date: Date(), snapshot: SnapshotIO.load() ?? DisplaySnapshot())
-        // 预排一条合理时间线；实际刷新由系统调度
-        let next = Calendar.current.date(byAdding: .minute, value: 30, to: Date()) ?? Date()
+        let snapshot = SnapshotIO.load() ?? DisplaySnapshot()
+        let entry = SnapshotEntry(date: Date(), snapshot: snapshot)
+        // 预排一条合理时间线；不堆积条目模拟视频（执行文档 11.2）。
+        // 新鲜快照按 30 分钟跟进；休眠快照放宽到 6 小时后再唤醒检查。
+        let minutes = snapshot.isStale ? 360 : 30
+        let next = Calendar.current.date(byAdding: .minute, value: minutes, to: Date()) ?? Date()
         completion(Timeline(entries: [entry], policy: .after(next)))
     }
 }
