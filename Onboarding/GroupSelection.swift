@@ -1,5 +1,6 @@
 import FamilyControls
 import Foundation
+import PingIslandKit
 
 /// 八修行组选择（执行文档 5.2）。
 /// 一个 App token 只能属于一个组；分组是用户自定的游戏映射，不推断真实用途；
