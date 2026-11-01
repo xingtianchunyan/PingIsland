@@ -35,3 +35,9 @@
   探索（每组每日 5 次上限）/装备择优/职业觉醒串联为确定性事件序列处理。
 - 门禁验证：批量=逐条、整序列重放全判重、乱序无回归、golden 跨引擎一致。
 - Windows XCTest **55/55 通过**。
+
+### 持久化与恢复层（2026-11-02）
+- SettlementStore 协议 + JSONFileSettlementStore（Data.atomic 原子写）；SettlementService：
+  事件先落日志→结算→存状态；恢复时重放日志补齐，恰好一次生效。SQLite/GRDB 留接口。
+- 6 个持久化 XCTest（往返/崩溃恢复/部分进度/重复恢复稳定/无半套文件/跨日分段）。
+- Windows XCTest **61/61 通过**。
