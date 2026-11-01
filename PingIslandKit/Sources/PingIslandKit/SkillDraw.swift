@@ -10,6 +10,8 @@ public struct SkillDraw: Equatable, Sendable {
     public var isActive: Bool
     /// 被动数值（稀有度序号 × Lv1 倍率）；主动为 0
     public var passiveValue: Int
+    /// 抽选所属星期（1=周一 … 7=周日），技能收藏按此归档
+    public var weekday: Int
 }
 
 public enum SkillDrawRules {
@@ -23,7 +25,8 @@ public enum SkillDrawRules {
         let template = SkillRules.template(forWeekday: weekday)
         return SkillDraw(template: template, rarity: rarity, isActive: isActive,
                          passiveValue: isActive ? 0
-                             : SkillRules.passiveValue(rarity: rarity, level: 1))
+                             : SkillRules.passiveValue(rarity: rarity, level: 1),
+                         weekday: weekday)
     }
 
     /// 连续 count 分钟的抽选序列（批量重建用，等价于逐分钟调用）
