@@ -20,3 +20,7 @@
 ### BLOCKED
 - Family Controls entitlement 需付费开发者账号 + Apple 授权（免费自签不可用，见 KNOWN_LIMITATIONS）。
 - 真机验证矩阵（执行文档 14.4）：待实体 iPhone 到位。
+
+### CI 首跑修正（2026-11-02 深夜）
+- 修复 XcodeGen 空源目录（Recovery 占位）、模拟器目的地（动态创建 iPhone 模拟器）。
+- **Actions 三任务全绿**：规则测试、模拟器集成测试、未签名 IPA 构建（工件已下载验证：含 Monitor/Widgets 扩展）。

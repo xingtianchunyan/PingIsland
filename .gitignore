@@ -39,3 +39,5 @@ SwiftSmokeTest/
 dl-*.ps1
 install-*.ps1
 swift-install.*.log
+dist/
+PingIsland-unsigned-ipa.zip
