@@ -129,3 +129,7 @@
 - DailyLifePool 六条日常生活片段；Monster 胜负文案；DiaryText.display(textKey) 单一来源解析，
   未知键原样返回便于排查。协调器三处 textKey 输出改走展示文案（快照/日记/Live Activity）。
 - Windows XCTest 86/86 通过（+4：全怪物胜负解析、200 连抽全可解析、未知键透传、池非空）。
+
+### 中尺寸卡片属性摘要（执行文档 11.2，2026-11-02）
+- DisplaySnapshot 增 attributeSummary（六维一行摘要，固定 CON→CHA 顺序）；中卡片展示。
+- App 侧测试 +1（含空/缺省 nil）。

@@ -46,4 +46,11 @@ final class WidgetPolicyTests: XCTestCase {
                                 bannerText: "职业觉醒：武僧")
         XCTAssertEqual(s.widgetStatusText, "职业觉醒：武僧")
     }
+
+    func testAttributeSummary() {
+        let withAttrs = DisplaySnapshot(attributes: ["CON": 3, "INT": 2, "CHA": 1, "DEX": 2])
+        XCTAssertEqual(withAttrs.attributeSummary, "CON 3 · INT 2 · DEX 2 · CHA 1")
+        XCTAssertNil(DisplaySnapshot().attributeSummary)
+        XCTAssertNil(DisplaySnapshot(attributes: [:]).attributeSummary)
+    }
 }

@@ -83,6 +83,17 @@ public struct DisplaySnapshot: Codable, Equatable {
         if let banner = bannerText { return banner }
         return isStale ? "休眠 · 等待同步" : recentEvent
     }
+
+    /// 六维属性一行摘要（中尺寸卡片，11.2）；无属性时为 nil
+    public var attributeSummary: String? {
+        guard let attributes, !attributes.isEmpty else { return nil }
+        let parts = ["CON", "INT", "DEX", "LUK", "WIS", "CHA"]
+            .compactMap { key -> String? in
+                guard let value = attributes[key] else { return nil }
+                return "\(key) \(value)"
+            }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
 }
 
 public enum SnapshotIO {

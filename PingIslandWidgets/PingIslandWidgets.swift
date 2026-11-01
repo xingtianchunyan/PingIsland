@@ -44,6 +44,11 @@ struct PingIslandMediumWidget: Widget {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(entry.snapshot.className).font(.headline)
                     Text("等级 \(entry.snapshot.level)").font(.subheadline)
+                    if let summary = entry.snapshot.attributeSummary {
+                        Text(summary)
+                            .font(.caption).foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                     Text(entry.snapshot.isStale ? "休眠 · 等待同步" : "状态：\(entry.snapshot.fatigueText)")
                         .font(.caption).foregroundStyle(.secondary)
                     if let at = entry.snapshot.lastSettlementAt, !entry.snapshot.isStale {
