@@ -1,3 +1,4 @@
+import PingIslandKit
 import XCTest
 @testable import PingIsland
 
