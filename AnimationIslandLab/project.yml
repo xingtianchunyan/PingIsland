@@ -1,0 +1,28 @@
+# 屏之岛 · AnimationIslandLab（实验性循环动画原型）
+# 依据：《屏之岛_iOS原生APP开发执行文档 v1.0》第 12 章。
+# 独立工程：不接入主 App、不进 CI；合入正式产品须经 12.4 六道门禁。
+# 生成方式：在本目录运行 xcodegen generate
+
+name: AnimationIslandLab
+options:
+  bundleIdPrefix: com.pingisland
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: "18.0"
+
+targets:
+  AnimationIslandLab:
+    platform: iOS
+    type: application
+    deploymentTarget: "18.0"
+    sources:
+      - path: Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.pingisland.animlab
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait

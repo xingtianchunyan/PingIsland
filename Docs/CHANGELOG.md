@@ -133,3 +133,8 @@
 ### 中尺寸卡片属性摘要（执行文档 11.2，2026-11-02）
 - DisplaySnapshot 增 attributeSummary（六维一行摘要，固定 CON→CHA 顺序）；中卡片展示。
 - App 侧测试 +1（含空/缺省 nil）。
+
+### 实验动画原型骨架（执行文档第 12 章，2026-11-02）
+- AnimationIslandLab 独立工程（不进 CI、不合入正式产品）：动作状态机（idle/walk/cast，
+  只接受外部状态驱动）、少帧变换角色视图、生命周期+内存日志与导出、12.3 必测项与
+  12.4 合入门禁写入 README；真实 DeviceActivity 事件接入列为后续项。
