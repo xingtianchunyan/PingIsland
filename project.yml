@@ -24,6 +24,7 @@ targets:
       - path: Onboarding
       - path: Character
       - path: Diary
+      - path: Debug
       - path: Settings
       - path: Recovery
       - path: Shared
