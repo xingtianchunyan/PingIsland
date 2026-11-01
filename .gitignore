@@ -32,3 +32,10 @@ ExportOptions.plist
 # 安装日志
 vsbt-install.*.log
 install-*.ps1
+
+# 冒烟测试临时目录
+SwiftSmokeTest/
+*.exe
+dl-*.ps1
+install-*.ps1
+swift-install.*.log

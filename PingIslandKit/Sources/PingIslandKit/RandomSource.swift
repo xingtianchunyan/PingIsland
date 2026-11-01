@@ -6,7 +6,40 @@ public protocol RandomSource {
     mutating func next() -> UInt64
 }
 
-/// SplitMix64 伪随机数发生器：状态小、可确定重建、跨平台稳定。
+/// 通用随机辅助（协议扩展，任何实现可用）
+public extension RandomSource {
+    /// 均匀整数 [0, upperBound)
+    mutating func nextInt(upperBound: Int) -> Int {
+        precondition(upperBound > 0)
+        let bound = UInt64(upperBound)
+        let threshold = (0 &- bound) % bound
+        while true {
+            let r = next()
+            if r >= threshold { return Int(r % bound) }
+        }
+    }
+
+    /// 均匀整数 [lowerBound, upperBound]（闭区间）
+    mutating func nextInt(lowerBound: Int, upperBound: Int) -> Int {
+        precondition(lowerBound <= upperBound)
+        return lowerBound + nextInt(upperBound: upperBound - lowerBound + 1)
+    }
+
+    /// 按权重选择索引；跳过非正权重，权重和必须为正
+    mutating func pickWeighted(_ weights: [Int]) -> Int {
+        let total = weights.reduce(0, +)
+        precondition(total > 0, "权重和必须为正")
+        var roll = nextInt(upperBound: total)
+        for (index, w) in weights.enumerated() {
+            if w <= 0 { continue }
+            if roll < w { return index }
+            roll -= w
+        }
+        return weights.count - 1
+    }
+}
+
+/// SplitMix64 伪随机数发生器：状态小、可确定重建、跨平台稳定
 public struct SeededRandom: RandomSource, Sendable {
     private var state: UInt64
 
@@ -20,36 +53,6 @@ public struct SeededRandom: RandomSource, Sendable {
         z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
         z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
         return z ^ (z >> 31)
-    }
-
-    /// 均匀整数 [0, upperBound)
-    public mutating func nextInt(upperBound: Int) -> Int {
-        precondition(upperBound > 0)
-        let bound = UInt64(upperBound)
-        let threshold = (0 &- bound) % bound
-        while true {
-            let r = next()
-            if r >= threshold { return Int(r % bound) }
-        }
-    }
-
-    /// 均匀整数 [lowerBound, upperBound]（闭区间）
-    public mutating func nextInt(lowerBound: Int, upperBound: Int) -> Int {
-        precondition(lowerBound <= upperBound)
-        return lowerBound + nextInt(upperBound: upperBound - lowerBound + 1)
-    }
-
-    /// 按权重选择索引；权重和必须为正
-    public mutating func pickWeighted(_ weights: [Int]) -> Int {
-        let total = weights.reduce(0, +)
-        precondition(total > 0, "权重和必须为正")
-        var roll = nextInt(upperBound: total)
-        for (index, w) in weights.enumerated() {
-            if w <= 0 { continue }
-            if roll < w { return index }
-            roll -= w
-        }
-        return weights.count - 1
     }
 }
 

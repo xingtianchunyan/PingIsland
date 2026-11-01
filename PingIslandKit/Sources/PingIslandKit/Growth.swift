@@ -38,10 +38,10 @@ public struct GrowthAccumulator: Equatable, Codable, Sendable {
     public mutating func settle(minutes: Int, dice: Int,
                                 factor: GrowthFactor = .neutral,
                                 passiveTenths: Int = 10) -> Int64 {
-        // milli = minutes * D * num * 10 * passiveTenths / (den * 10)
-        // 化简：minutes * D * num * passiveTenths / den
+        // 成长值 = minutes × (D/10) × (num/den) × (passiveTenths/10)
+        // 千分之一定点：milli = minutes × D × num × passiveTenths × 10 / den
         let segmentMilli =
-            Int64(minutes) * Int64(dice) * Int64(factor.numerator) * Int64(passiveTenths)
+            Int64(minutes) * Int64(dice) * Int64(factor.numerator) * Int64(passiveTenths) * 10
             / Int64(factor.denominator)
         totalMilli += segmentMilli
         return segmentMilli
