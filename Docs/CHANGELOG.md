@@ -41,3 +41,9 @@
   事件先落日志→结算→存状态；恢复时重放日志补齐，恰好一次生效。SQLite/GRDB 留接口。
 - 6 个持久化 XCTest（往返/崩溃恢复/部分进度/重复恢复稳定/无半套文件/跨日分段）。
 - Windows XCTest **61/61 通过**。
+
+### 真实事件纵切片（2026-11-02）
+- PendingEventQueue（App Group 待结算队列，消费语义 drain）；监控扩展阈值回调解析分钟数
+  以稳定事件身份入队（不再伪造 level+1 演示）；SettlementCoordinator：主 App 前台消费队列
+  → SettlementService 结算 → 刷新展示快照与 Live Activity；展示失败不回滚结算。
+- App 侧测试：队列消费一次、协调器结算+快照刷新、重复入队不重复发奖（CI 模拟器验证）。

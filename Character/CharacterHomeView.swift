@@ -27,7 +27,11 @@ struct CharacterHomeView: View {
                 LiveActivityControls()
             }
             .navigationTitle("屏之岛")
-            .onAppear { snapshot = SnapshotIO.load() ?? DisplaySnapshot() }
+            .onAppear {
+                // 消费监控扩展积累的待结算事件；无新数据时零开销
+                SettlementCoordinator.settlePending()
+                snapshot = SnapshotIO.load() ?? DisplaySnapshot()
+            }
         }
     }
 }

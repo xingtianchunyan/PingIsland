@@ -58,6 +58,11 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
 
     public var level: Int64 { growth.level }
 
+    /// 某日已入账的确认分钟合计（疲劳展示等只读用途）
+    public func confirmedMinutes(on localDate: String) -> Int {
+        appliedThreshold[localDate]?.reduce(0) { $0 + $1.value } ?? 0
+    }
+
     /// 以修行组选择初始化：随机分配 10 点初始属性（种子固定，可重建）
     public init(groups: [TrainingGroup], characterSeed: UInt64 = 1) {
         var rng = SeededRandom(seed: characterSeed)

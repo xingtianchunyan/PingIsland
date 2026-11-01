@@ -1,8 +1,9 @@
 import DeviceActivity
 import Foundation
+import PingIslandKit
 
-/// DeviceActivityMonitor 扩展（执行文档 7）：接收阈值事件，最小化写入共享容器。
-/// 注意：扩展内不做完整结算；真实结算在 Phase 2 接入 SettlementStore 事务。
+/// DeviceActivityMonitor 扩展（执行文档 7）：接收阈值事件，最小化写入待结算队列。
+/// 结算不在扩展内发生：主 App 下次执行机会时经 SettlementCoordinator 统一结算。
 class PingIslandMonitorExtension: DeviceActivityMonitor {
     private let defaults = UserDefaults(suiteName: SharedStore.appGroup)
 
@@ -19,10 +20,22 @@ class PingIslandMonitorExtension: DeviceActivityMonitor {
     override func eventDidReachThreshold(_ event: DeviceActivityEvent.Name,
                                          activity: DeviceActivityName) {
         super.eventDidReachThreshold(event, activity: activity)
-        // 已确认里程碑到达：记录事件身份，主 App 下次启动时结算
-        // （结算幂等由稳定事件身份保证，重试不重抽）
-        appendLog("threshold.\(event.rawValue)")
-        updateSnapshot(event: event.rawValue)
+        // 已确认里程碑：解析阈值分钟数，以稳定事件身份入队。
+        // 注意：事件名格式 pingisland.threshold.<分钟>；分组归属在八组选择接入后细化（见 MonitoringRegistrar）。
+        let parts = event.rawValue.split(separator: ".")
+        guard parts.count == 3, let minutes = Int(parts[2]) else {
+            appendLog("threshold.unparsed.\(event.rawValue)")
+            return
+        }
+        let now = Date()
+        let usage = UsageEvent(
+            stableEventID: "\(dateString(now)).\(event.rawValue)", // 每事件每日唯一，重试不重
+            group: .other, // Phase 2：按 selectionVersion 映射到修行组
+            thresholdMinutes: minutes,
+            localDate: dateString(now),
+            confirmedAt: now)
+        PendingEventQueue.enqueue([usage])
+        appendLog("threshold.queued.\(event.rawValue)")
     }
 
     override func intervalWillStartWarning(for activity: DeviceActivityName) {
@@ -33,16 +46,6 @@ class PingIslandMonitorExtension: DeviceActivityMonitor {
         super.intervalWillEndWarning(for: activity)
     }
 
-    /// 写展示快照：等级 +1 演示“自动成长”链路打通；正式公式由结算引擎在事务内统一提交
-    private func updateSnapshot(event: String) {
-        var snapshot = SnapshotIO.load() ?? DisplaySnapshot()
-        snapshot.level += 1
-        snapshot.recentEvent = "已确认里程碑：\(event)"
-        snapshot.lastSettlementAt = Date()
-        snapshot.snapshotVersion += 1
-        SnapshotIO.save(snapshot)
-    }
-
     private func appendLog(_ line: String) {
         let key = "monitor.log.v1"
         let stamp = ISO8601DateFormatter().string(from: Date())
@@ -51,5 +54,13 @@ class PingIslandMonitorExtension: DeviceActivityMonitor {
         lines.append(entry)
         if lines.count > 100 { lines.removeFirst(lines.count - 100) }
         defaults?.set(lines, forKey: key)
+    }
+
+    private func dateString(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f.string(from: date)
     }
 }
