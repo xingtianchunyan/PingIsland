@@ -1,0 +1,34 @@
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Swift Package Manager
+.build/
+.swiftpm/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+
+# Xcode
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.xcuserstate
+
+# 证书与签名（绝不入库）
+*.p12
+*.mobileprovision
+*.cer
+*.certSigningRequest
+ExportOptions.plist
+
+# 本地环境
+.env
+.env.*
+
+# 安装日志
+vsbt-install.*.log
+install-*.ps1
