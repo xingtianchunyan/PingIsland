@@ -58,7 +58,7 @@ public enum SettlementCoordinator {
             level: Int(engine.level),
             className: engine.classState?.rawValue ?? "觉醒中",
             fatigueStage: FatigueRules.stage(confirmedMinutesTotal: engine.confirmedMinutes(on: today)).rawValue,
-            recentEvent: recent.map { "日记：\($0.textKey)（\($0.rewardSummary)）" } ?? "等待第一次结算",
+            recentEvent: recent.map { "日记：\(DiaryText.display($0.textKey))（\($0.rewardSummary)）" } ?? "等待第一次结算",
             lastSettlementAt: recent?.recordedAt ?? Date(),
             snapshotVersion: (SnapshotIO.load()?.snapshotVersion ?? 0) + 1,
             displayPriority: priority.rawValue,
@@ -73,7 +73,7 @@ public enum SettlementCoordinator {
                 },
             recentDiaries: engine.diary.suffix(10).reversed().map { entry in
                 let reward = entry.rewardSummary.isEmpty ? "" : " · \(entry.rewardSummary)"
-                return "\(shortTimestamp(entry.recordedAt)) · \(entry.textKey)\(reward)"
+                return "\(shortTimestamp(entry.recordedAt)) · \(DiaryText.display(entry.textKey))\(reward)"
             },
             collection: engine.equipment
                 .sorted { ($0.rarity != $1.rarity) ? $0.rarity > $1.rarity : $0.id < $1.id }
@@ -96,7 +96,7 @@ public enum SettlementCoordinator {
         let state = PingIslandActivityAttributes.ContentState(
             level: Int(engine.level),
             className: engine.classState?.rawValue ?? "觉醒中",
-            recentEvent: engine.diary.last?.textKey ?? "等待第一次结算")
+            recentEvent: engine.diary.last.map { DiaryText.display($0.textKey) } ?? "等待第一次结算")
         for activity in Activity<PingIslandActivityAttributes>.activities {
             Task { await activity.update(using: state) }
         }

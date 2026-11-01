@@ -45,7 +45,7 @@ public enum EncounterRules {
                 textKey: won ? "encounter.\(monster.rawValue).win" : "encounter.\(monster.rawValue).lose")
         }
         return EncounterResult(entryType: .dailyLife,
-                               textKey: "dailylife.\(rng.nextInt(upperBound: 6))")
+                               textKey: "dailylife.\(rng.nextInt(upperBound: DailyLifePool.texts.count))")
     }
 
     /// 生成日记记录；recordedAt 为结算时刻（调用方传入）
@@ -55,5 +55,43 @@ public enum EncounterRules {
         DiaryRecord(recordedAt: recordedAt, group: group,
                     entryType: encounter.entryType, textKey: encounter.textKey,
                     rewardSummary: rewardSummary)
+    }
+}
+
+public extension Monster {
+    var winText: String { "战胜了\(rawValue)" }
+    var loseText: String { "被\(rawValue)击退" }
+}
+
+/// 日常生活片段池（执行文档 9.7：70% 日常）
+public enum DailyLifePool {
+    public static let texts: [String] = [
+        "在沙滩上散步",
+        "给篝火添了把柴",
+        "收集了一枚贝壳",
+        "练习了新的姿势",
+        "晒了会儿太阳",
+        "整理了一下背包",
+    ]
+}
+
+/// 日记 textKey → 展示文案（执行文档 9.7；文案单一来源，UI 不拼 key）
+public enum DiaryText {
+    /// 未知键原样返回，便于排查而不崩溃
+    public static func display(_ key: String) -> String {
+        if key.hasPrefix("encounter.") {
+            let body = String(key.dropFirst("encounter.".count))
+            let parts = body.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+            if parts.count == 2, let monster = Monster(rawValue: parts[0]) {
+                return parts[1] == "win" ? monster.winText : monster.loseText
+            }
+        }
+        if key.hasPrefix("dailylife.") {
+            let index = Int(key.dropFirst("dailylife.".count)) ?? -1
+            if DailyLifePool.texts.indices.contains(index) {
+                return DailyLifePool.texts[index]
+            }
+        }
+        return key
     }
 }
