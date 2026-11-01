@@ -95,5 +95,5 @@
 
 - 真实 DeviceActivity 事件接入动画实验（签名受限）。
 - App Intent 便捷启动 Live Activity（文档标注"可研究，非必做"）。
-- 技能收藏项（CollectionItem 主动/被动模板实例化）——引擎现只产出装备藏品。
+- 技能收藏项（CollectionItem 主动/被动模板实例化）——SkillCollection 已实现（同模板+同稀有度同一收藏项、Lv5 转化），尚未接入结算引擎主流程。
 - TestFlight / 长期 soak（Phase 5，需付费账号）。
