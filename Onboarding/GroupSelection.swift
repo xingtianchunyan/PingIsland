@@ -55,18 +55,13 @@ public enum GroupSelection {
                                  for group: TrainingGroup,
                                  existing: [TrainingGroup: FamilyActivitySelection])
         -> FamilyActivitySelection {
-        var takenApps = Set<ApplicationToken>()
-        var takenCategories = Set<ActivityCategoryToken>()
-        var takenDomains = Set<WebDomainToken>()
-        for (g, s) in existing where g != group {
-            takenApps.formUnion(s.applicationTokens)
-            takenCategories.formUnion(s.categoryTokens)
-            takenDomains.formUnion(s.webDomainTokens)
-        }
         var result = incoming
-        result.applicationTokens = deduplicate(incoming.applicationTokens, excluding: [takenApps])
-        result.categoryTokens = deduplicate(incoming.categoryTokens, excluding: [takenCategories])
-        result.webDomainTokens = deduplicate(incoming.webDomainTokens, excluding: [takenDomains])
+        for (g, s) in existing where g != group {
+            // 不显式命名 token 类型（其符号在编译接口中不保证可见），统一走成员访问 + 泛型去重
+            result.applicationTokens = deduplicate(result.applicationTokens, excluding: [s.applicationTokens])
+            result.categoryTokens = deduplicate(result.categoryTokens, excluding: [s.categoryTokens])
+            result.webDomainTokens = deduplicate(result.webDomainTokens, excluding: [s.webDomainTokens])
+        }
         return result
     }
 
