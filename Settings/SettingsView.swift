@@ -39,26 +39,6 @@ struct SettingsView: View {
 
     /// 恢复入口（执行文档 13.3）：重新请求授权并按已保存分组重建监控。
     private func rebuildMonitoring() {
-        AuthorizationCenter.shared.requestAuthorization { result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success:
-                    let state = GroupSelection.load()
-                    var selections: [TrainingGroup: FamilyActivitySelection] = [:]
-                    for group in GroupSelection.orderedGroups {
-                        let s = state.selection(for: group)
-                        let count = s.applicationTokens.count + s.categoryTokens.count
-                            + s.webDomainTokens.count
-                        if count > 0 { selections[group] = s }
-                    }
-                    MonitoringRegistrar.register(selections: selections)
-                    rebuildMessage = selections.isEmpty
-                        ? "已授权，但没有已保存的分组；请先在首次设置中选择修行组。"
-                        : "已重建 \(selections.count) 组监控。"
-                case .failure(let error):
-                    rebuildMessage = "授权未完成：\(error.localizedDescription)"
-                }
-            }
-        }
+        RecoveryService.rebuildMonitoring { rebuildMessage = $0 }
     }
 }
