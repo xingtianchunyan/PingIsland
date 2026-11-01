@@ -5,10 +5,10 @@ import XCTest
 
 /// 模拟事件源（执行文档 13.1）：与生产账本隔离、确定性、可重置。
 final class SimulatedUsageSourceTests: XCTestCase {
-    private var base: URL {
+    private lazy var base: URL = {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("sim-tests-\(UUID().uuidString)", isDirectory: true)
-    }
+    }()
 
     override func tearDown() {
         super.tearDown()
