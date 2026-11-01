@@ -1,41 +1,61 @@
 import DeviceActivity
 import FamilyControls
 import Foundation
+import PingIslandKit
 
-/// 监控注册（执行文档 7.2/7.3：Phase 0 先用 30/60/90 分钟累计阈值验证）
+/// 监控注册（执行文档 7.2/7.3）：每组独立 activity 与事件，标识稳定可持久化。
+/// Phase 0 阈值：每组 30/60/90 分钟累计事件；数量与系统上限需真机实测记录。
 enum MonitoringRegistrar {
-    static func register(selection: FamilyActivitySelection) {
+    static func register(selections: [TrainingGroup: FamilyActivitySelection]) {
         let center = DeviceActivityCenter()
         center.stopMonitoring() // 先停旧配置，保证可重建
 
-        // 全天重复的监控周期
         let schedule = DeviceActivitySchedule(
             intervalStart: DateComponents(hour: 0, minute: 0),
             intervalEnd: DateComponents(hour: 23, minute: 59),
             repeats: true)
 
-        // Phase 0 阈值：30/60/90 分钟累计事件（每组共用同一选择，
-        // 分组归属在 Phase 2 由 selectionVersion + 分组映射细化）
         let thresholds = [30, 60, 90]
-        var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
-        for minutes in thresholds {
-            let name = DeviceActivityEvent.Name("pingisland.threshold.\(minutes)")
-            events[name] = DeviceActivityEvent(applications: selection.applicationTokens,
-                                               categories: selection.categoryTokens,
-                                               webDomains: selection.webDomainTokens,
-                                               threshold: DateComponents(minute: minutes))
+        var registeredAny = false
+        for (group, selection) in selections {
+            let hasTokens = !selection.applicationTokens.isEmpty
+                || !selection.categoryTokens.isEmpty || !selection.webDomainTokens.isEmpty
+            guard hasTokens else { continue }
+            let activityName = DeviceActivityName("pingisland.g\(groupIndex(group))")
+            var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
+            for minutes in thresholds {
+                let name = DeviceActivityEvent.Name(MonitorEventParser.name(group: group, minutes: minutes))
+                events[name] = DeviceActivityEvent(applications: selection.applicationTokens,
+                                                   categories: selection.categoryTokens,
+                                                   webDomains: selection.webDomainTokens,
+                                                   threshold: DateComponents(minute: minutes))
+            }
+            do {
+                try center.startMonitoring(activityName, during: schedule, events: events)
+                registeredAny = true
+            } catch {
+                // 单组注册失败不阻塞其他组；记录错误提供重建入口（执行文档 13.3）
+                appendLog("register.failed.\(group.rawValue).\(error.localizedDescription)")
+            }
         }
-
-        do {
-            try center.startMonitoring(.daily, during: schedule, events: events)
+        if registeredAny {
             SharedStore.defaults?.set(Date(), forKey: SharedStore.Keys.monitorRegisteredAt)
-        } catch {
-            // 监控注册失败：记录错误，提供重建入口（执行文档 13.3）
+        } else {
             SharedStore.defaults?.removeObject(forKey: SharedStore.Keys.monitorRegisteredAt)
         }
     }
-}
 
-extension DeviceActivityName {
-    static let daily = DeviceActivityName("pingisland.daily")
+    private static func groupIndex(_ group: TrainingGroup) -> Int {
+        TrainingGroup.allCases.firstIndex(of: group) ?? 0
+    }
+
+    private static func appendLog(_ line: String) {
+        let key = "monitor.register.v1"
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        let entry = "[\(stamp)] \(line)"
+        var lines = SharedStore.defaults?.stringArray(forKey: key) ?? []
+        lines.append(entry)
+        if lines.count > 50 { lines.removeFirst(lines.count - 50) }
+        SharedStore.defaults?.set(lines, forKey: key)
+    }
 }

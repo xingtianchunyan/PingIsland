@@ -20,18 +20,16 @@ class PingIslandMonitorExtension: DeviceActivityMonitor {
     override func eventDidReachThreshold(_ event: DeviceActivityEvent.Name,
                                          activity: DeviceActivityName) {
         super.eventDidReachThreshold(event, activity: activity)
-        // 已确认里程碑：解析阈值分钟数，以稳定事件身份入队。
-        // 注意：事件名格式 pingisland.threshold.<分钟>；分组归属在八组选择接入后细化（见 MonitoringRegistrar）。
-        let parts = event.rawValue.split(separator: ".")
-        guard parts.count == 3, let minutes = Int(parts[2]) else {
+        // 已确认里程碑：解析组与阈值分钟数，以稳定事件身份入队。
+        guard let parsed = MonitorEventParser.parse(event.rawValue) else {
             appendLog("threshold.unparsed.\(event.rawValue)")
             return
         }
         let now = Date()
         let usage = UsageEvent(
             stableEventID: "\(dateString(now)).\(event.rawValue)", // 每事件每日唯一，重试不重
-            group: .other, // Phase 2：按 selectionVersion 映射到修行组
-            thresholdMinutes: minutes,
+            group: parsed.group,
+            thresholdMinutes: parsed.minutes,
             localDate: dateString(now),
             confirmedAt: now)
         PendingEventQueue.enqueue([usage])

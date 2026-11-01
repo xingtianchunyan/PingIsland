@@ -47,3 +47,15 @@
   以稳定事件身份入队（不再伪造 level+1 演示）；SettlementCoordinator：主 App 前台消费队列
   → SettlementService 结算 → 刷新展示快照与 Live Activity；展示失败不回滚结算。
 - App 侧测试：队列消费一次、协调器结算+快照刷新、重复入队不重复发奖（CI 模拟器验证）。
+
+### 八修行组选择 UI 与按组监控注册（执行文档 5.2，2026-11-02）
+- GroupSelection：固定 8 组顺序、State 持久化（version 递增）、sanitized 跨组 token 查重
+  （一个 App 只属一个组，14.3）、泛型 deduplicate 可测。
+- MonitorEventParser：事件名 `pingisland.g<组序>.t<分钟>` 生成/解析往返一致；兼容旧格式
+  `pingisland.threshold.<分钟>`（归“其他”组）。
+- OnboardingView 重写：欢迎（能力边界）→ 逐组 FamilyActivityPicker（展示倾向属性与对应职业、
+  setter 内查重）→ 汇总 → 授权成功后持久化分组、建角色种子、按组注册监控、写初始快照。
+- MonitoringRegistrar 重写：每组独立 activity（`pingisland.g<组序>`）+ 30/60/90 分钟事件，
+  单组失败不阻塞其余组，日志键 monitor.register.v1；SettlementCoordinator 结算组取持久化分组。
+- App 侧测试：分组顺序/去重/State 往返、事件名解析（8 组×3 阈值往返、旧格式、非法串）
+  —— CI 模拟器验证；Windows 规则引擎回归 61/61 保持通过。

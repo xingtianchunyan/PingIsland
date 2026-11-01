@@ -12,7 +12,9 @@ public enum SettlementCoordinator {
         guard !events.isEmpty else { return 0 }
 
         do {
-            let service = try SettlementService(store: store(), groups: [], characterSeed: seed())
+            let groups = GroupSelection.load().nonEmptyGroups
+            let service = try SettlementService(store: store(), groups: groups,
+                                                characterSeed: seed())
             let outcomes = service.process(events)
             refreshSnapshot(from: service.engine)
             updateLiveActivity(from: service.engine)
