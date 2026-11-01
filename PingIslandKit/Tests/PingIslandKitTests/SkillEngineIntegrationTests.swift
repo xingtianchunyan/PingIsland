@@ -1,0 +1,91 @@
+import XCTest
+@testable import PingIslandKit
+
+/// 执行文档 9.6：技能抽选接入结算主流程——每个有效分钟一次确定性抽选，
+/// 且旧版本 state JSON（无 skillCollection 键）可无损解码。
+final class SkillEngineIntegrationTests: XCTestCase {
+    private let day = "2026-11-02" // 周一
+    private var settleTime: Date { Date(timeIntervalSince1970: 1_762_000_000) }
+
+    private func event(_ id: String, _ group: TrainingGroup = .games,
+                       _ minutes: Int, date: String? = nil) -> UsageEvent {
+        UsageEvent(stableEventID: id, group: group, thresholdMinutes: minutes,
+                   localDate: date ?? day, confirmedAt: settleTime)
+    }
+
+    // MARK: 1. 同种子两引擎处理同一事件序列 → 抽选序列完全相等且条数等于累计有效分钟
+
+    func testDeterministicDrawSequenceAcrossEngines() {
+        let seed: UInt64 = 20261102
+        var a = SettlementEngine(groups: [.games], characterSeed: seed)
+        var b = SettlementEngine(groups: [.games], characterSeed: seed)
+        let events = [event("d1", .games, 30), event("d2", .games, 90),
+                      event("d3", .games, 150, date: "2026-11-03")]
+        let outcomesA = a.process(events)
+        let outcomesB = b.process(events)
+        XCTAssertEqual(outcomesA, outcomesB)
+
+        let draws = outcomesA.compactMap { outcome -> [SkillDraw]? in
+            if case .settled(let delta) = outcome { return delta.skillDraws }
+            return nil
+        }.flatMap { $0 }
+        XCTAssertEqual(draws.count, 240) // 30 + 60 + 150（11-03 为新日期，全额入账）
+        XCTAssertEqual(a.skillCollection, b.skillCollection)
+        XCTAssertFalse(a.skillCollection.items.isEmpty)
+    }
+
+    // MARK: 2. 抽选与 SkillDrawRules.sequence 独立重建完全一致（重试/恢复不重抽的验收口径）
+
+    func testDrawsMatchIndependentReconstruction() {
+        var engine = SettlementEngine(groups: [.games], characterSeed: 9)
+        let events = [event("r1", .games, 30), event("r2", .games, 60)]
+        let outcomes = engine.process(events)
+        let draws = outcomes.compactMap { outcome -> [SkillDraw]? in
+            if case .settled(let delta) = outcome { return delta.skillDraws }
+            return nil
+        }.flatMap { $0 }
+
+        // 独立重建：当日骰点 + 分钟序号 1...60
+        let dice = engine.segments[day]?.dice?.value ?? 0
+        let weekday = SkillDrawRules.weekday(forLocalDate: day)
+        let expected = SkillDrawRules.sequence(characterSeed: 9, dice: dice,
+                                               fromMinute: 1, count: 60, weekday: weekday)
+        XCTAssertEqual(draws, expected)
+    }
+
+    // MARK: 3. 旧格式 state JSON（无 skillCollection 键）可解码，缺失键按空收藏处理
+
+    func testLegacyStateJSONDecodesWithoutSkillCollection() throws {
+        var engine = SettlementEngine(groups: [.games], characterSeed: 5)
+        engine.process([event("l1", .games, 30)])
+        var data = try JSONEncoder().encode(engine)
+
+        // 删掉 skillCollection 键，模拟旧版本存档
+        var object = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        object.removeValue(forKey: "skillCollection")
+        data = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder().decode(SettlementEngine.self, from: data)
+        XCTAssertEqual(decoded.level, engine.level) // 成长等核心状态无损
+        XCTAssertEqual(decoded.processedEventIDs, engine.processedEventIDs)
+        XCTAssertTrue(decoded.skillCollection.items.isEmpty) // 旧键缺失 → 空收藏
+    }
+
+    // MARK: 4. 星期归属：抽选的 weekday 与 localDate 一致，跨天各自归档
+
+    func testWeekdayAttributionAcrossDates() {
+        var engine = SettlementEngine(groups: [.games], characterSeed: 3)
+        // 2026-11-02 周一，2026-11-08 周日
+        let outcomes = engine.process([event("w1", .games, 10, date: "2026-11-02"),
+                                       event("w2", .games, 10, date: "2026-11-08")])
+        let draws = outcomes.compactMap { outcome -> [SkillDraw]? in
+            if case .settled(let delta) = outcome { return delta.skillDraws }
+            return nil
+        }.flatMap { $0 }
+        XCTAssertEqual(draws.count, 20)
+        XCTAssertEqual(Set(draws.map { $0.weekday }), [1, 7])
+        for item in engine.skillCollection.items {
+            XCTAssertTrue((1...7).contains(item.weekday))
+        }
+    }
+}

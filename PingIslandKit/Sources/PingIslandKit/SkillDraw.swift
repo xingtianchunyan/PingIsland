@@ -1,3 +1,5 @@
+import Foundation
+
 /// 技能抽选（执行文档 9.6）：每个有效使用分钟只做一次逻辑技能抽选，
 /// 由（角色种子、当日骰点、有效分钟序号、星期）确定性重建；
 /// 不创建后台任务、不保存动画帧、不批量补播。
@@ -34,5 +36,19 @@ public enum SkillDrawRules {
                                 fromMinute start: Int, count: Int, weekday: Int) -> [SkillDraw] {
         (0..<max(0, count)).map { draw(characterSeed: characterSeed, dice: dice,
                                        minuteIndex: start + $0, weekday: weekday) }
+    }
+
+    /// localDate（yyyy-MM-dd）→ 星期（1=周一 … 7=周日；格里历固定，不受设备地区影响）
+    public static func weekday(forLocalDate localDate: String) -> Int {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        guard let date = formatter.date(from: localDate) else { return 1 }
+        // 系统 weekday：1=周日…7=周六 → 转为 1=周一…7=周日
+        let sys = Calendar(identifier: .gregorian)
+            .dateComponents([.weekday], from: date).weekday ?? 2
+        return (sys + 5) % 7 + 1
     }
 }

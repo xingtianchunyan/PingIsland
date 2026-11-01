@@ -28,10 +28,13 @@ public struct SettlementDelta: Equatable, Sendable {
     public var diaries: [DiaryRecord]
     public var classChanged: CharacterClass?
     public var oracleIssued: Bool
+    /// 本批有效分钟的技能抽选（每分钟一次，执行文档 9.6）
+    public var skillDraws: [SkillDraw]
 
     public static let zero = SettlementDelta(growthMilliApplied: 0, newMinutes: 0,
                                              levelAfter: 1, explorations: [], diaries: [],
-                                             classChanged: nil, oracleIssued: false)
+                                             classChanged: nil, oracleIssued: false,
+                                             skillDraws: [])
 }
 
 public enum SettlementOutcome: Equatable, Sendable {
@@ -55,6 +58,33 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
     private var appliedThreshold: [String: [TrainingGroup: Int]] = [:]
     private var observationMinutes: [TrainingGroup: Int] = [:]
     private var observationDays: Set<String> = []
+    /// 技能收藏（9.6：由有效分钟抽选累积；升级满级后转化点数）
+    public private(set) var skillCollection = SkillCollection()
+
+    private enum CodingKeys: String, CodingKey {
+        case growth, baseAttributes, equipment, equipped, diary, processedEventIDs
+        case segments, classState, characterSeed, appliedThreshold
+        case observationMinutes, observationDays, skillCollection
+    }
+
+    /// 旧版本 state JSON 没有 skillCollection 键：解码时按空收藏兼容，其余字段照原要求
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        growth = try c.decode(GrowthAccumulator.self, forKey: .growth)
+        baseAttributes = try c.decode([Attribute: Int].self, forKey: .baseAttributes)
+        equipment = try c.decode([EquipmentItem].self, forKey: .equipment)
+        equipped = try c.decode([EquipmentSlot: EquipmentItem].self, forKey: .equipped)
+        diary = try c.decode([DiaryRecord].self, forKey: .diary)
+        processedEventIDs = try c.decode(Set<String>.self, forKey: .processedEventIDs)
+        segments = try c.decode([String: GameDaySegment].self, forKey: .segments)
+        classState = try c.decodeIfPresent(CharacterClass.self, forKey: .classState)
+        characterSeed = try c.decode(UInt64.self, forKey: .characterSeed)
+        appliedThreshold = try c.decode([String: [TrainingGroup: Int]].self, forKey: .appliedThreshold)
+        observationMinutes = try c.decode([TrainingGroup: Int].self, forKey: .observationMinutes)
+        observationDays = try c.decode(Set<String>.self, forKey: .observationDays)
+        skillCollection = try c.decodeIfPresent(SkillCollection.self, forKey: .skillCollection)
+            ?? SkillCollection()
+    }
 
     public var level: Int64 { growth.level }
 
@@ -118,6 +148,18 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
             let appliedMilli = growth.settle(minutes: newMinutes, dice: dice, factor: factor)
             delta.growthMilliApplied = appliedMilli
             delta.newMinutes = newMinutes
+        }
+
+        // 5.5 技能抽选：每个有效分钟一次逻辑抽选（9.6），按（种子、骰点、分钟序号、星期）确定性
+        if newMinutes > 0 {
+            let weekday = SkillDrawRules.weekday(forLocalDate: event.localDate)
+            for i in 0..<newMinutes {
+                let draw = SkillDrawRules.draw(
+                    characterSeed: characterSeed, dice: dice,
+                    minuteIndex: applied + i + 1, weekday: weekday)
+                skillCollection.add(draw)
+                delta.skillDraws.append(draw)
+            }
         }
 
         // 6. 探索：每满 30 分钟一次，每组每日最多 5 次；一次跨多个里程碑按序补算

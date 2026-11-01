@@ -147,3 +147,10 @@
 - SkillDraw 增 weekday 字段；SkillCollection：同一模板（星期+主被动）＋同一稀有度=
   同一收藏项，重复升 Lv2~Lv5，Lv5 后再重复按稀有度转化为属性点（点数与池来自 SkillRules）。
 - Windows XCTest 91/91 通过（+5：新建、升满五级、满级转化、异稀有度分项、Codable 往返）。
+
+## 2026-11-02 技能抽选接入结算主流程（9.6）
+- SettlementEngine.process 第 5.5 步：每个有效分钟一次 SkillDrawRules 确定性抽选（种子+骰点+分钟序号+星期），写入 skillCollection 并进入 delta.skillDraws
+- SettlementEngine 新增 skillCollection 存储属性；手写 init(from:) 兼容旧格式 state JSON（skillCollection 键缺失按空收藏解码），编码保持合成
+- SettlementDelta 新增 skillDraws 字段
+- 新增 SkillEngineIntegrationTests（4 例）：跨引擎序列确定性、与独立重建一致、旧 JSON 解码兼容、跨天星期归档
+- 本地 Kit 回归 95/95 通过
