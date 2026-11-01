@@ -9,11 +9,11 @@
 
 | 项 | 状态 | 证据 |
 |---|---|---|
-| Windows Swift 工具链 6.4.2 + SDKROOT | 已完成 | swift test 本地 86/86 |
+| Windows Swift 工具链 6.4.2 + SDKROOT | 已完成 | swift test 本地 95/95 |
 | XcodeGen 五 Target 工程 | 已完成 | project.yml，CI 构建通过 |
 | App Group group.com.pingisland.shared | 已完成 | SharedStore，entitlements |
 | 私有仓库 + CI 三任务 | 已完成 | run 41344818829 全绿（故障前） |
-| GitHub Actions macOS runner | 待真机→外部故障 | 2026-11-02 凌晨起 runner 供给故障，积压验证 |
+| GitHub Actions macOS runner | 待真机→外部故障 | 2026-11-02 凌晨起 runner 供给故障，20+ 次触发秒挂（runner_id=0），积压验证 |
 
 ## 第 5 章 首次设置与页面
 
@@ -86,7 +86,7 @@
 
 | 项 | 状态 |
 |---|---|
-| 14.1 自动化规则测试 | 已完成（Kit 86/86：骰子/成长/探索/装备/觉醒/疲劳/时区/结算/持久化/优先级/技能/文案） |
+| 14.1 自动化规则测试 | 已完成（Kit 95/95：骰子/成长/探索/装备/觉醒/疲劳/时区/结算/持久化/优先级/技能/文案/技能引擎集成） |
 | 14.2 并发与集成 | 已完成（队列消费、协调器、模拟源——CI 模拟器） |
 | 14.3 UI 与降级 | 部分（幂等/旧快照兼容/休眠口径已测）/ 待真机 |
 | 14.4 真机验证矩阵 | 待真机（表已建） |
@@ -95,5 +95,5 @@
 
 - 真实 DeviceActivity 事件接入动画实验（签名受限）。
 - App Intent 便捷启动 Live Activity（文档标注"可研究，非必做"）。
-- 技能收藏项（CollectionItem 主动/被动模板实例化）——SkillCollection 已实现（同模板+同稀有度同一收藏项、Lv5 转化），尚未接入结算引擎主流程。
+- 技能收藏项（同模板+同稀有度同一收藏项、Lv5 转化）已接入结算引擎主流程：每个有效分钟抽选并入收藏（b3e7877，Kit 95/95）。
 - TestFlight / 长期 soak（Phase 5，需付费账号）。
