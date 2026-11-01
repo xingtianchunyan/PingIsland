@@ -59,3 +59,6 @@
   单组失败不阻塞其余组，日志键 monitor.register.v1；SettlementCoordinator 结算组取持久化分组。
 - App 侧测试：分组顺序/去重/State 往返、事件名解析（8 组×3 阈值往返、旧格式、非法串）
   —— CI 模拟器验证；Windows 规则引擎回归 61/61 保持通过。
+- CI 三轮修正：GroupSelection 补 import PingIslandKit；token 类型不显式命名（成员访问+泛型去重，
+  FamilyControls token 符号在编译接口中不保证可见）；测试补 import PingIslandKit。
+- **Actions 三任务全绿**（run 41340327661，commit 213c67d），新 IPA 已下载 dist/PingIsland-unsigned.ipa。
