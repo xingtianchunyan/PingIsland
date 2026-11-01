@@ -62,3 +62,12 @@
 - CI 三轮修正：GroupSelection 补 import PingIslandKit；token 类型不显式命名（成员访问+泛型去重，
   FamilyControls token 符号在编译接口中不保证可见）；测试补 import PingIslandKit。
 - **Actions 三任务全绿**（run 41340327661，commit 213c67d），新 IPA 已下载 dist/PingIsland-unsigned.ipa。
+
+### 调试面板与模拟事件源（执行文档 13.1/13.3，2026-11-02）
+- SimulatedUsageSource：明确标注的模拟事件源，独立账本目录 settlement-simulated、
+  sim. 前缀事件 ID、固定种子 42（结果确定可复现），与生产 DeviceActivity 账本完全隔离。
+- DebugPanelView（仅 DEBUG 编译）：授权/分组版本/账本路径状态、最近 20 个已处理事件与高水位、
+  模拟事件注入结算（红标“模拟数据”）、Widget 刷新与 Live Activity 测试更新、
+  脱敏诊断报告导出（不含 token/真实 App 名）、模拟账本重置。
+- Settings：重新授权并重建监控（恢复入口，按已保存分组重注册）、隐私说明按 13.2 补全。
+- App 侧测试 5 个：sim 前缀与唯一性、独立目录、模拟结算只写模拟账本、重置清空、固定种子确定性。
