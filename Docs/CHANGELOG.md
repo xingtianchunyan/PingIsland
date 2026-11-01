@@ -89,3 +89,10 @@
 - SettlementCoordinator 结算后按最近增量解析优先级写快照；调试面板可标记/清除异常休眠
   便于端到端验证。
 - **Actions 三任务全绿**（run 41346401604，commit 61dce1b），Kit 70/70（+10 优先级测试），新 IPA 已下载。
+
+### 角色主页数据完整化（Phase 4，2026-11-02）
+- DisplaySnapshot 增 attributes（六维初始属性）与 equipment（择优装备预格式化摘要），
+  可选字段旧 JSON 兼容；SnapshotPresentation 品阶文案（白~红）。
+- SettlementCoordinator 结算时把引擎属性/已装备写入快照；角色主页重写为分区列表：
+  角色卡（横幅/最近事件/实时活动控制）、六维属性条、装备栏。
+- App 侧测试 +1：带新字段快照往返一致。

@@ -1,4 +1,5 @@
 import Foundation
+import PingIslandKit
 
 /// 共享容器（App Group）访问 —— 展示快照的唯一读取通道。
 /// 展示与结算分离：Widget/灵动岛/App 只读本快照，绝不执行结算。
@@ -31,11 +32,16 @@ public struct DisplaySnapshot: Codable, Equatable {
     public var displayPriority: Int?
     /// 优先级横幅文案（nil = 用最近事件展示）
     public var bannerText: String?
+    /// 六维初始属性（Attribute rawValue → 点数）
+    public var attributes: [String: Int]?
+    /// 已装备摘要（执行文档 9.4 择优结果；预格式化展示串）
+    public var equipment: [String]?
 
     public init(level: Int = 1, className: String = "觉醒中",
                 fatigueStage: Int = 0, recentEvent: String = "等待第一次结算",
                 lastSettlementAt: Date? = nil, snapshotVersion: Int = 1,
-                displayPriority: Int? = nil, bannerText: String? = nil) {
+                displayPriority: Int? = nil, bannerText: String? = nil,
+                attributes: [String: Int]? = nil, equipment: [String]? = nil) {
         self.level = level
         self.className = className
         self.fatigueStage = fatigueStage
@@ -44,6 +50,8 @@ public struct DisplaySnapshot: Codable, Equatable {
         self.snapshotVersion = snapshotVersion
         self.displayPriority = displayPriority
         self.bannerText = bannerText
+        self.attributes = attributes
+        self.equipment = equipment
     }
 
     public var fatigueText: String {
@@ -79,5 +87,19 @@ public enum SnapshotIO {
     public static func load() -> DisplaySnapshot? {
         guard let data = SharedStore.defaults?.data(forKey: SharedStore.Keys.snapshot) else { return nil }
         return try? JSONDecoder().decode(DisplaySnapshot.self, from: data)
+    }
+}
+
+/// 展示层格式化助手（执行文档 9.4/9.5 品阶文案）
+public enum SnapshotPresentation {
+    public static func rarityName(_ rarity: Rarity) -> String {
+        switch rarity {
+        case .white: return "白装"
+        case .green: return "绿装"
+        case .blue: return "蓝装"
+        case .purple: return "紫装"
+        case .orange: return "橙装"
+        case .red: return "红装"
+        }
     }
 }

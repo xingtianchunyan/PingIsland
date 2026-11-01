@@ -13,6 +13,17 @@ final class PingIslandTests: XCTestCase {
         XCTAssertEqual(loaded, snapshot)
     }
 
+    func testSnapshotRoundTripWithAttributesAndEquipment() {
+        let snapshot = DisplaySnapshot(
+            level: 5, className: "武僧", fatigueStage: 1, recentEvent: "晨练",
+            lastSettlementAt: Date(timeIntervalSince1970: 1_760_000_000),
+            snapshotVersion: 3, displayPriority: 2, bannerText: "神谕赐予属性",
+            attributes: ["CON": 3, "INT": 2, "DEX": 2, "LUK": 1, "WIS": 1, "CHA": 1],
+            equipment: ["头部 · 蓝装 · 评 4", "足部 · 绿装 · 评 3"])
+        SnapshotIO.save(snapshot)
+        XCTAssertEqual(SnapshotIO.load(), snapshot)
+    }
+
     func testFreshSnapshotDefaults() {
         let fresh = DisplaySnapshot()
         XCTAssertEqual(fresh.level, 1)

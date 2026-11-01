@@ -62,7 +62,15 @@ public enum SettlementCoordinator {
             lastSettlementAt: recent?.recordedAt ?? Date(),
             snapshotVersion: (SnapshotIO.load()?.snapshotVersion ?? 0) + 1,
             displayPriority: priority.rawValue,
-            bannerText: PresentationPolicy.banner(for: priority, input: priorityInput))
+            bannerText: PresentationPolicy.banner(for: priority, input: priorityInput),
+            attributes: engine.baseAttributes.reduce(into: [String: Int]()) {
+                $0[$1.key.rawValue] = $1.value
+            },
+            equipment: engine.equipped
+                .sorted { $0.key.rawValue < $1.key.rawValue }
+                .map { slot, item in
+                    "\(slot.rawValue) · \(SnapshotPresentation.rarityName(item.rarity)) · 评 \(item.totalValue)"
+                })
         SnapshotIO.save(snapshot)
     }
 
