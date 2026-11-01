@@ -71,3 +71,5 @@
   脱敏诊断报告导出（不含 token/真实 App 名）、模拟账本重置。
 - Settings：重新授权并重建监控（恢复入口，按已保存分组重注册）、隐私说明按 13.2 补全。
 - App 侧测试 5 个：sim 前缀与唯一性、独立目录、模拟结算只写模拟账本、重置清空、固定种子确定性。
+- CI 三轮修正：Debug 目录入 target 源列表、补 ActivityKit 导入、测试 base 目录改懒加载存储属性。
+- **Actions 三任务全绿**（run 41344183511，commit 0e6d870），新 IPA 已下载 dist/PingIsland-unsigned.ipa。
