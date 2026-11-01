@@ -1,7 +1,7 @@
 /// 单次探索的原子顺序与魅力追加（执行文档 9.2/9.3）。
 /// 展示与结算分离：本模块只做纯规则计算，副作用（账本写入）由调用方在事务内统一提交。
 
-public struct ExplorationReward: Equatable, Sendable {
+public struct ExplorationReward: Equatable, Codable, Sendable {
     public var kind: RewardKind
     public var rarity: Rarity
     public var equipment: [EquipmentItem] // 0~2 件
