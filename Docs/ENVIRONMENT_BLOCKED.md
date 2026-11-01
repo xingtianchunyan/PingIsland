@@ -1,42 +1,30 @@
-# ENVIRONMENT_BLOCKED — 原生 iOS 工程环境门禁
+# ENVIRONMENT — 环境状态与路线说明
 
-生成日期：2026-11-02
-依据：《屏之岛_iOS原生App开发执行文档 v1.0》第 0.2 节环境探测门禁
+更新日期：2026-11-02（路线变更）
 
-## 环境探测记录
+## 原门禁结论（执行文档 0.2 节）
 
-| 检查项 | 命令 | 实际结果 |
+本机为 Windows，无 macOS/Xcode，原生工程验收曾暂停。
+
+## 现行路线（用户 2026-11-02 确认，无 Mac）
+
+**Windows（Kimi Work 写码 + swift test 规则测试）→ push → GitHub Actions 免费 macOS runner 自动编译未签名 IPA → 下载 → Sideloadly 自签装入实体 iPhone，全部测试在手机上进行。**
+
+- CI 云编译机只负责构建，不承担交互式开发；
+- 工程以 XcodeGen 定义（`project.yml`），任何机器 `xcodegen generate` 可重建 .xcodeproj；
+- 模拟器集成测试也在 Actions 上运行；
+- 真机验收（阈值回调、长期不打开 App、灵动岛生命周期、耗电）在实体 iPhone 上进行并记录到 `Docs/PLATFORM_VALIDATION.md`。
+
+## 仍缺失（外部条件）
+
+| 缺失项 | 影响 | 恢复方式 |
 |---|---|---|
-| 系统 | `uname -s`（等价探测） | Windows 11 专业版 64 位（**非 macOS**） |
-| 系统版本 | `sw_vers` | 不适用（Windows；版本 10.0.x） |
-| Xcode | `xcodebuild -version` | **未安装 / 不存在** |
-| 模拟器 | `xcrun simctl list devices available` | **不可用** |
-| Git | `git status` / `git --version` | git 2.47.1.windows.1 ✅ |
+| 实体 iPhone | 无法做真实监控/灵动岛/锁屏验证 | 用户自备 |
+| Apple ID（建议专用） | Sideloadly 自签必需 | 用户在 Sideloadly 界面亲自输入 |
+| 付费 Apple Developer + Family Controls 授权 | 监控扩展 entitlement 无法生效 | 免费自签下监控不可用；办会员并向 Apple 申请 |
 
-## 门禁结论
+## Windows 侧已完成
 
-**当前环境不满足 iOS 原生工程验收条件。** 按执行文档 0.2 节：
-
-- 不得声称已编译 iOS App；
-- 原生工程验收暂停；
-- 继续准备：仓库规范、平台无关规则引擎、环境清单；
-- 不改用 React Native / Flutter / 网页 App / Android 绕过。
-
-## 缺失项与恢复步骤
-
-| 缺失项 | 恢复方式 |
-|---|---|
-| macOS + 当前稳定 Xcode | 路线 A：云 Mac（图形远程桌面 + SSH）；或路线 B：自有 Mac（推荐长期开发，见执行文档 2.2/2.3） |
-| Apple Developer 签名环境 | 用户在 Mac/Xcode 自行登录，证书与描述文件不入库 |
-| 实体 iPhone | TestFlight 真机验证矩阵（执行文档 14.4） |
-
-## 恢复后的强制顺序（执行文档第 15/18 章）
-
-1. 先在 macOS 完成 Phase 0：空白多 Target 工程、共享 Scheme、App Group、Family Controls 授权、DeviceActivity 阈值回调、Widget 读共享快照、Live Activity 生命周期；
-2. 输出 `Docs/PLATFORM_VALIDATION.md` 真实记录；
-3. 之后才进入 Phase 2 之后的完整 MVP 开发。
-
-## Windows 侧当前可做（不违反门禁）
-
-- 规则引擎（成长/骰子/探索/装备/职业/日记的纯逻辑）开发与 XCTest 验证（Swift on Windows）；
-- 仓库规范、CI 中的规则测试任务、文档。
+- VS2022 Build Tools（VCTools）、Swift 6.4.2 官方完整版、VS Code + Swift 扩展；
+- PingIslandKit 规则引擎 27/27 XCTest 通过（详见 环境配置报告.md）；
+- 多 Target Xcode 工程定义（App/Monitor/Widgets/Tests）已提交，CI 构建结果见 Actions。

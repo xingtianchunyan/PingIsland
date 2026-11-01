@@ -1,9 +1,6 @@
 # 屏之岛 CI
+# 路线：Windows 写码 + 规则测试 → GitHub Actions 云编译 IPA → Sideloadly 装真机
 # 依据：《屏之岛_KimiCode环境配置任务书》阶段 4 + 开发执行文档 4.3 节
-#
-# 当前启用：规则引擎 swift test（平台无关，macOS runner）。
-# 未签名 IPA 构建与模拟器测试任务：等待 macOS 环境完成 Phase 0 工程引导后启用
-# （当前仓库尚无 Xcode 工程，启用必然失败，违反"直到变绿"要求）。
 
 name: ios
 
@@ -27,24 +24,49 @@ jobs:
         working-directory: PingIslandKit
         run: swift test --parallel
 
-  # ── 以下任务在 Xcode 工程引导（chore/project-bootstrap on macOS）后启用 ──
-  # ios-build:
-  #   name: 未签名 IPA 构建
-  #   runs-on: macos-15
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Xcode 构建（generic/iOS，未签名）
-  #       run: |
-  #         xcodebuild -scheme PingIsland -configuration Release \
-  #           -destination 'generic/platform=iOS' \
-  #           -derivedDataPath DerivedData \
-  #           CODE_SIGNING_ALLOWED=NO build
-  # simulator-test:
-  #   name: 模拟器测试
-  #   runs-on: macos-15
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: 运行 XCTest（iPhone 17 模拟器）
-  #       run: |
-  #         xcodebuild test -scheme PingIsland \
-  #           -destination 'platform=iOS Simulator,name=iPhone 17'
+  simulator-test:
+    name: 模拟器集成/UI 测试
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装 XcodeGen
+        run: brew install xcodegen
+      - name: 生成 Xcode 工程
+        run: xcodegen generate
+      - name: 运行模拟器测试（iPhone 16）
+        run: |
+          xcodebuild test -scheme PingIsland -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            CODE_SIGNING_ALLOWED=NO \
+            -only-testing:PingIslandTests \
+            -derivedDataPath DerivedData
+
+  ios-build:
+    name: 构建未签名 IPA
+    runs-on: macos-15
+    needs: [rules-test, simulator-test]
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装 XcodeGen
+        run: brew install xcodegen
+      - name: 生成 Xcode 工程
+        run: xcodegen generate
+      - name: 归档（未签名，generic/iOS）
+        run: |
+          xcodebuild archive -scheme PingIsland -configuration Release \
+            -archivePath build/PingIsland.xcarchive \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+      - name: 打包 IPA
+        run: |
+          ls build/PingIsland.xcarchive/Products/Applications/
+          mkdir -p build/Payload
+          cp -R build/PingIsland.xcarchive/Products/Applications/*.app build/Payload/
+          cd build && zip -qr PingIsland-unsigned.ipa Payload && ls -lh PingIsland-unsigned.ipa
+      - name: 上传 IPA 工件
+        uses: actions/upload-artifact@v4
+        with:
+          name: PingIsland-unsigned-ipa
+          path: build/PingIsland-unsigned.ipa
+          retention-days: 14

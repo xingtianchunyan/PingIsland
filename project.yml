@@ -1,0 +1,146 @@
+# XcodeGen 工程定义 —— 屏之岛多 Target iOS 工程
+# 生成方式：xcodegen generate（CI 与 macOS 环境共用）
+# 依据：《屏之岛_iOS原生App开发执行文档 v1.0》3.2/3.3 节
+
+name: PingIsland
+options:
+  bundleIdPrefix: com.pingisland
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: "18.0"
+
+packages:
+  PingIslandKit:
+    path: PingIslandKit
+
+targets:
+  # 主 App
+  PingIsland:
+    platform: iOS
+    type: application
+    deploymentTarget: "18.0"
+    sources:
+      - path: App
+      - path: Onboarding
+      - path: Character
+      - path: Diary
+      - path: Settings
+      - path: Recovery
+      - path: Shared
+      - path: Resources
+    configFiles: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.pingisland.app
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGNING_ALLOWED: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    entitlements:
+      path: App/PingIsland.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+        com.apple.security.application-groups:
+          - group.com.pingisland.shared
+    dependencies:
+      - package: PingIslandKit
+      - target: PingIslandMonitor
+        embed: true
+      - target: PingIslandWidgets
+        embed: true
+
+  # DeviceActivity 监控扩展
+  PingIslandMonitor:
+    platform: iOS
+    type: app-extension
+    deploymentTarget: "18.0"
+    sources:
+      - path: PingIslandMonitor
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.pingisland.app.monitor
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: PingIslandMonitor/Info.plist
+        CODE_SIGNING_ALLOWED: NO
+    entitlements:
+      path: PingIslandMonitor/PingIslandMonitor.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+        com.apple.security.application-groups:
+          - group.com.pingisland.shared
+    dependencies:
+      - package: PingIslandKit
+
+  # Widget 扩展（桌面卡片 + Live Activity/灵动岛视图）
+  PingIslandWidgets:
+    platform: iOS
+    type: app-extension
+    deploymentTarget: "18.0"
+    sources:
+      - path: PingIslandWidgets
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.pingisland.app.widgets
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: PingIslandWidgets/Info.plist
+        CODE_SIGNING_ALLOWED: NO
+    entitlements:
+      path: PingIslandWidgets/PingIslandWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.pingisland.shared
+    dependencies:
+      - package: PingIslandKit
+
+  # 主 App 集成测试
+  PingIslandTests:
+    platform: iOS
+    type: bundle.unit-test
+    sources:
+      - path: Tests/PingIslandTests
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.pingisland.app.tests
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: PingIsland
+      - package: PingIslandKit
+
+  # UI 测试
+  PingIslandUITests:
+    platform: iOS
+    type: bundle.ui-testing
+    sources:
+      - path: Tests/PingIslandUITests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.pingisland.app.uitests
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: PingIsland
+
+schemes:
+  PingIsland:
+    build:
+      targets:
+        PingIsland: [build, run, profile, analyze, archive, test]
+        PingIslandTests: [test]
+        PingIslandUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - PingIslandTests
+        - PingIslandUITests
+    archive:
+      config: Release

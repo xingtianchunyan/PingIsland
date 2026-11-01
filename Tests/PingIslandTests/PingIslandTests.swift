@@ -1,0 +1,27 @@
+import XCTest
+@testable import PingIsland
+
+/// 共享快照读写与初始状态（执行文档 14.2/14.3）
+final class PingIslandTests: XCTestCase {
+    func testSnapshotRoundTrip() {
+        let snapshot = DisplaySnapshot(level: 3, className: "武僧",
+                                       fatigueStage: 1, recentEvent: "晨练吐纳",
+                                       lastSettlementAt: Date(timeIntervalSince1970: 1_760_000_000),
+                                       snapshotVersion: 2)
+        SnapshotIO.save(snapshot)
+        let loaded = SnapshotIO.load()
+        XCTAssertEqual(loaded, snapshot)
+    }
+
+    func testFreshSnapshotDefaults() {
+        let fresh = DisplaySnapshot()
+        XCTAssertEqual(fresh.level, 1)
+        XCTAssertEqual(fresh.className, "觉醒中")
+        XCTAssertEqual(fresh.snapshotVersion, 1)
+    }
+
+    func testFatigueTextMapping() {
+        XCTAssertEqual(DisplaySnapshot(fatigueStage: 0).fatigueText, "精神饱满")
+        XCTAssertEqual(DisplaySnapshot(fatigueStage: 4).fatigueText, "休眠")
+    }
+}
