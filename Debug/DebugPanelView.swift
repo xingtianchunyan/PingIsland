@@ -16,6 +16,7 @@ struct DebugPanelView: View {
     @State private var recentEvents: [String] = []
     @State private var highWaterMark = 0
     @State private var message = ""
+    @State private var anomalySleepOn = false
 
     var body: some View {
         List {
@@ -58,6 +59,10 @@ struct DebugPanelView: View {
                 }
             }
             Section("诊断") {
+                Button(anomalySleepOn ? "清除异常休眠标记" : "标记异常休眠（测 11.4 最高优先级）") {
+                    anomalySleepOn.toggle()
+                    SharedStore.defaults?.set(anomalySleepOn, forKey: SharedStore.Keys.anomalySleep)
+                }
                 ShareLink(item: diagnosticReport()) {
                     Text("导出脱敏诊断日志")
                 }
@@ -68,7 +73,10 @@ struct DebugPanelView: View {
             }
         }
         .navigationTitle("调试面板")
-        .onAppear(perform: refresh)
+        .onAppear {
+            anomalySleepOn = SharedStore.defaults?.bool(forKey: SharedStore.Keys.anomalySleep) ?? false
+            refresh()
+        }
     }
 
     // MARK: - 状态与事件

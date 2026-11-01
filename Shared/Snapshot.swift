@@ -14,6 +14,8 @@ public enum SharedStore {
         public static let onboardingComplete = "onboardingComplete.v1"
         public static let selectionVersion = "selectionVersion.v1"
         public static let monitorRegisteredAt = "monitorRegisteredAt.v1"
+        /// 恢复层确认异常休眠（执行文档 11.4 最高展示优先级）
+        public static let anomalySleep = "anomalySleep.v1"
     }
 }
 
@@ -25,16 +27,23 @@ public struct DisplaySnapshot: Codable, Equatable {
     public var recentEvent: String
     public var lastSettlementAt: Date?
     public var snapshotVersion: Int
+    /// 展示优先级（执行文档 11.4，DisplayPriority rawValue；nil = 日常姿态）
+    public var displayPriority: Int?
+    /// 优先级横幅文案（nil = 用最近事件展示）
+    public var bannerText: String?
 
     public init(level: Int = 1, className: String = "觉醒中",
                 fatigueStage: Int = 0, recentEvent: String = "等待第一次结算",
-                lastSettlementAt: Date? = nil, snapshotVersion: Int = 1) {
+                lastSettlementAt: Date? = nil, snapshotVersion: Int = 1,
+                displayPriority: Int? = nil, bannerText: String? = nil) {
         self.level = level
         self.className = className
         self.fatigueStage = fatigueStage
         self.recentEvent = recentEvent
         self.lastSettlementAt = lastSettlementAt
         self.snapshotVersion = snapshotVersion
+        self.displayPriority = displayPriority
+        self.bannerText = bannerText
     }
 
     public var fatigueText: String {
@@ -54,9 +63,10 @@ public struct DisplaySnapshot: Codable, Equatable {
         return Date().timeIntervalSince(at) > 6 * 3600
     }
 
-    /// 卡片状态行：休眠优先于最近事件
+    /// 卡片状态行：优先级横幅 > 休眠 > 最近事件
     public var widgetStatusText: String {
-        isStale ? "休眠 · 等待同步" : recentEvent
+        if let banner = bannerText { return banner }
+        return isStale ? "休眠 · 等待同步" : recentEvent
     }
 }
 

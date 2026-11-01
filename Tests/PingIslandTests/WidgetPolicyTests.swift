@@ -27,4 +27,23 @@ final class WidgetPolicyTests: XCTestCase {
         let edge = DisplaySnapshot(lastSettlementAt: Date().addingTimeInterval(-(6 * 3600 - 60)))
         XCTAssertFalse(edge.isStale)
     }
+
+    func testOldSnapshotJSONWithoutNewFieldsStillDecodes() throws {
+        // 旧版本快照（无 displayPriority/bannerText）必须可解码：新字段为可选
+        let oldJSON = """
+        {"level":3,"className":"武僧","fatigueStage":1,"recentEvent":"晨练吐纳",\
+        "lastSettlementAt":1760000000,"snapshotVersion":2}
+        """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(DisplaySnapshot.self, from: oldJSON)
+        XCTAssertEqual(decoded.level, 3)
+        XCTAssertNil(decoded.displayPriority)
+        XCTAssertNil(decoded.bannerText)
+    }
+
+    func testBannerOverridesStatusText() {
+        let s = DisplaySnapshot(recentEvent: "晨练吐纳",
+                                lastSettlementAt: Date().addingTimeInterval(-3600),
+                                bannerText: "职业觉醒：武僧")
+        XCTAssertEqual(s.widgetStatusText, "职业觉醒：武僧")
+    }
 }

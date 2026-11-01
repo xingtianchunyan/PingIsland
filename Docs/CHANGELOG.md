@@ -80,3 +80,11 @@
 - 小/中卡片接入口径；时间线策略：新鲜 30 分钟跟进、休眠 6 小时后再检查，不堆积条目模拟视频。
 - App 侧测试 4 个：1 小时新鲜、7 小时休眠、从未结算、5 小时 59 分边界。
 - **Actions 三任务全绿**（run 41344818829，commit 7304d27），新 IPA 已下载 dist/PingIsland-unsigned.ipa。
+
+### 展示优先级（执行文档 11.4，2026-11-02）
+- Kit 新增 PresentationPolicy：异常休眠 > 夜间(23:00-07:00) > 神谕/职业觉醒/新收藏 >
+  遭遇 > 日常姿态，纯函数 Windows XCTest 10 个全过（判定+夜间小时+横幅文案）。
+- DisplaySnapshot 增 displayPriority/bannerText（可选字段，旧快照 JSON 兼容解码）；
+  卡片状态行 = 横幅 > 休眠 > 最近事件。
+- SettlementCoordinator 结算后按最近增量解析优先级写快照；调试面板可标记/清除异常休眠
+  便于端到端验证。

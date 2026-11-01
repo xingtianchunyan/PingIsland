@@ -16,7 +16,11 @@ public enum SettlementCoordinator {
             let service = try SettlementService(store: store(), groups: groups,
                                                 characterSeed: seed())
             let outcomes = service.process(events)
-            refreshSnapshot(from: service.engine)
+            let deltas = outcomes.compactMap { outcome -> SettlementDelta? in
+                if case .settled(let d) = outcome { return d }
+                return nil
+            }
+            refreshSnapshot(from: service.engine, latestDelta: deltas.last)
             updateLiveActivity(from: service.engine)
             return outcomes.filter { $0 != .duplicate }.count
         } catch {
@@ -41,8 +45,14 @@ public enum SettlementCoordinator {
 
     // MARK: - 展示刷新（展示失败不回滚结算，执行文档 11.1）
 
-    private static func refreshSnapshot(from engine: SettlementEngine) {
+    private static func refreshSnapshot(from engine: SettlementEngine,
+                                        latestDelta: SettlementDelta?) {
         let today = dateString(Date())
+        let priorityInput = PresentationInput(
+            latestDelta: latestDelta,
+            hasAnomalySleep: SharedStore.defaults?.bool(forKey: SharedStore.Keys.anomalySleep) ?? false,
+            isNight: PresentationPolicy.isNight(Date()))
+        let priority = PresentationPolicy.resolve(priorityInput)
         let recent = engine.diary.last
         let snapshot = DisplaySnapshot(
             level: Int(engine.level),
@@ -50,7 +60,9 @@ public enum SettlementCoordinator {
             fatigueStage: FatigueRules.stage(confirmedMinutesTotal: engine.confirmedMinutes(on: today)).rawValue,
             recentEvent: recent.map { "日记：\($0.textKey)（\($0.rewardSummary)）" } ?? "等待第一次结算",
             lastSettlementAt: recent?.recordedAt ?? Date(),
-            snapshotVersion: (SnapshotIO.load()?.snapshotVersion ?? 0) + 1)
+            snapshotVersion: (SnapshotIO.load()?.snapshotVersion ?? 0) + 1,
+            displayPriority: priority.rawValue,
+            bannerText: PresentationPolicy.banner(for: priority, input: priorityInput))
         SnapshotIO.save(snapshot)
     }
 
