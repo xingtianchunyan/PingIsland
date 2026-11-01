@@ -36,12 +36,17 @@ public struct DisplaySnapshot: Codable, Equatable {
     public var attributes: [String: Int]?
     /// 已装备摘要（执行文档 9.4 择优结果；预格式化展示串）
     public var equipment: [String]?
+    /// 最近日记片段（新→旧，预格式化；执行文档 9.7）
+    public var recentDiaries: [String]?
+    /// 收藏页：装备藏品清单（品阶降序，预格式化）
+    public var collection: [String]?
 
     public init(level: Int = 1, className: String = "觉醒中",
                 fatigueStage: Int = 0, recentEvent: String = "等待第一次结算",
                 lastSettlementAt: Date? = nil, snapshotVersion: Int = 1,
                 displayPriority: Int? = nil, bannerText: String? = nil,
-                attributes: [String: Int]? = nil, equipment: [String]? = nil) {
+                attributes: [String: Int]? = nil, equipment: [String]? = nil,
+                recentDiaries: [String]? = nil, collection: [String]? = nil) {
         self.level = level
         self.className = className
         self.fatigueStage = fatigueStage
@@ -52,6 +57,8 @@ public struct DisplaySnapshot: Codable, Equatable {
         self.bannerText = bannerText
         self.attributes = attributes
         self.equipment = equipment
+        self.recentDiaries = recentDiaries
+        self.collection = collection
     }
 
     public var fatigueText: String {

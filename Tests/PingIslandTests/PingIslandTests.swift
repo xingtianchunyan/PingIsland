@@ -19,7 +19,9 @@ final class PingIslandTests: XCTestCase {
             lastSettlementAt: Date(timeIntervalSince1970: 1_760_000_000),
             snapshotVersion: 3, displayPriority: 2, bannerText: "神谕赐予属性",
             attributes: ["CON": 3, "INT": 2, "DEX": 2, "LUK": 1, "WIS": 1, "CHA": 1],
-            equipment: ["头部 · 蓝装 · 评 4", "足部 · 绿装 · 评 3"])
+            equipment: ["头部 · 蓝装 · 评 4", "足部 · 绿装 · 评 3"],
+            recentDiaries: ["11-02 08:00 · 晨练吐纳 · CON+1"],
+            collection: ["蓝装 · 头部 · 评 4 · 装备中", "绿装 · 足部 · 评 3"])
         SnapshotIO.save(snapshot)
         XCTAssertEqual(SnapshotIO.load(), snapshot)
     }

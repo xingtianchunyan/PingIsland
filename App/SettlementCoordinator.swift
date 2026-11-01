@@ -70,8 +70,26 @@ public enum SettlementCoordinator {
                 .sorted { $0.key.rawValue < $1.key.rawValue }
                 .map { slot, item in
                     "\(slot.rawValue) · \(SnapshotPresentation.rarityName(item.rarity)) · 评 \(item.totalValue)"
+                },
+            recentDiaries: engine.diary.suffix(10).reversed().map { entry in
+                let reward = entry.rewardSummary.isEmpty ? "" : " · \(entry.rewardSummary)"
+                return "\(shortTimestamp(entry.recordedAt)) · \(entry.textKey)\(reward)"
+            },
+            collection: engine.equipment
+                .sorted { ($0.rarity != $1.rarity) ? $0.rarity > $1.rarity : $0.id < $1.id }
+                .map { item in
+                    let worn = item.isEquipped ? " · 装备中" : ""
+                    return "\(SnapshotPresentation.rarityName(item.rarity)) · \(item.slot.rawValue) · 评 \(item.totalValue)\(worn)"
                 })
         SnapshotIO.save(snapshot)
+    }
+
+    private static func shortTimestamp(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "MM-dd HH:mm"
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f.string(from: date)
     }
 
     private static func updateLiveActivity(from engine: SettlementEngine) {
