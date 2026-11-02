@@ -242,6 +242,11 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
                 continue
             }
             item.isEquipped = true
+            // 换上新装备时，撤掉旧藏品的"装备中"标记，否则收藏页同部位出现多个装备中
+            if let old = equipped[item.slot],
+               let idx = equipment.firstIndex(where: { $0.id == old.id }) {
+                equipment[idx].isEquipped = false
+            }
             equipped[item.slot] = item
             equipment.append(item)
         }

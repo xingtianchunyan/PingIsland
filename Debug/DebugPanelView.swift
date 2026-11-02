@@ -10,6 +10,7 @@ import WidgetKit
 struct DebugPanelView: View {
     @State private var simGroup: TrainingGroup = .games
     @State private var simMinutes = 30
+    @State private var simDayOffset = 0
     @State private var simResult = ""
     @State private var statusLines: [String] = []
     @State private var recentEvents: [String] = []
@@ -41,8 +42,16 @@ struct DebugPanelView: View {
                 Picker("修行组", selection: $simGroup) {
                     ForEach(GroupSelection.orderedGroups, id: \.self) { Text($0.rawValue).tag($0) }
                 }
-                Stepper("阈值分钟：\(simMinutes)", value: $simMinutes, in: 5...480, step: 5)
-                Button("注入模拟事件并结算") { injectSimulated() }
+                Stepper("阈值分钟：\(simMinutes)", value: $simMinutes, in: 30...480, step: 30)
+                Button("注入模拟事件并结算") { injectSimulated(dayOffset: simDayOffset) }
+                Button("模拟过一天（注入明天的新事件）") {
+                    simDayOffset += 1
+                    injectSimulated(dayOffset: simDayOffset)
+                }
+                if simDayOffset > 0 {
+                    Text("模拟日期：今天 +\(simDayOffset) 天（每日新骰点）")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
                 if !simResult.isEmpty {
                     Text(simResult).font(.caption).foregroundStyle(.secondary)
                 }
@@ -132,22 +141,27 @@ struct DebugPanelView: View {
 
     // MARK: - 模拟数据（独立账本）
 
-    private func injectSimulated() {
+    private func injectSimulated(dayOffset: Int = 0) {
         let base = SettlementCoordinator.store().directory.deletingLastPathComponent()
         do {
             let service = try SettlementService(store: SimulatedUsageSource.store(base: base),
                                                 groups: Array(TrainingGroup.allCases),
                                                 characterSeed: SimulatedUsageSource.seed)
             let now = Date()
+            let localDate = simDate(dayOffset: dayOffset)
             let event = SimulatedUsageSource.makeEvent(
                 group: simGroup, thresholdMinutes: simMinutes,
-                localDate: dateString(now), confirmedAt: now,
+                localDate: localDate, confirmedAt: now,
                 sequence: SimulatedUsageSource.eventCount(base: base) + 1)
             let outcome = service.process(event)
-            var text = "【模拟数据】结算=\(outcome) 等级=\(service.engine.level) "
+            let dice = service.engine.segments[localDate]?.dice?.value ?? 0
+            let newMinutes = (outcome == .duplicate) ? 0
+                : ({ if case .settled(let d) = outcome { return d.newMinutes }; return 0 }())
+            var text = "【模拟数据】日期 \(localDate) · 新增入账 \(newMinutes) 分钟 · 骰点 \(dice)\n"
+                + "结算=\(outcome) 等级=\(service.engine.level) "
                 + "日记=\(service.engine.diary.count) 条 高水位=\(SimulatedUsageSource.eventCount(base: base))"
             if case .settled(let delta) = outcome, delta.newMinutes == 0 {
-                text += "\n该事件无新增入账分钟（同组同日该阈值已入账，补差不倒退）。调高阈值分钟再注入。"
+                text += "\n该事件无新增入账分钟（同组同日该阈值已入账，补差不倒退）。调高阈值或过天再注入。"
             }
             // 同步到展示链路：快照 → Widget / Live Activity，角色页/日记页立即可见
             SettlementCoordinator.syncDisplayFromSimulated(service.engine)
@@ -158,6 +172,13 @@ struct DebugPanelView: View {
         } catch {
             simResult = "模拟结算失败：\(error.localizedDescription)"
         }
+    }
+
+    /// 模拟日期：今天 + dayOffset 天（yyyy-MM-dd），用于跨天测试每日骰子
+    private func simDate(dayOffset: Int) -> String {
+        let day = Calendar(identifier: .gregorian)
+            .date(byAdding: .day, value: dayOffset, to: Date()) ?? Date()
+        return dateString(day)
     }
 
     // MARK: - Live Activity 测试更新

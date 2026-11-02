@@ -77,7 +77,7 @@ public enum SettlementCoordinator {
             equipment: engine.equipped
                 .sorted { $0.key.rawValue < $1.key.rawValue }
                 .map { _, item in SnapshotPresentation.equipmentSummary(item) },
-            recentDiaries: engine.diary.suffix(10).reversed().map { entry in
+            recentDiaries: engine.diary.suffix(30).reversed().map { entry in
                 let reward = entry.rewardSummary.isEmpty ? "" : " · \(entry.rewardSummary)"
                 return "\(shortTimestamp(entry.recordedAt)) · \(DiaryText.display(entry.textKey))\(reward)"
             },
