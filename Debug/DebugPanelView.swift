@@ -94,6 +94,7 @@ struct DebugPanelView: View {
         let simBase = SettlementCoordinator.store().directory.deletingLastPathComponent()
         lines.append("生产账本：\(SettlementCoordinator.store().directory.path)")
         lines.append("模拟账本：\(SimulatedUsageSource.store(base: simBase).directory.path)")
+        lines.append("模拟高水位：\(SimulatedUsageSource.eventCount(base: simBase)) 条事件")
         statusLines = lines
 
         let store = SettlementCoordinator.store()
@@ -132,8 +133,17 @@ struct DebugPanelView: View {
                 localDate: dateString(now), confirmedAt: now,
                 sequence: SimulatedUsageSource.eventCount(base: base) + 1)
             let outcome = service.process(event)
-            simResult = "【模拟数据】结算=\(outcome) 等级=\(service.engine.level) "
+            var text = "【模拟数据】结算=\(outcome) 等级=\(service.engine.level) "
                 + "日记=\(service.engine.diary.count) 条 高水位=\(SimulatedUsageSource.eventCount(base: base))"
+            if case .settled(let delta) = outcome, delta.newMinutes == 0 {
+                text += "\n该事件无新增入账分钟（同组同日该阈值已入账，补差不倒退）。调高阈值分钟再注入。"
+            }
+            // 同步到展示链路：快照 → Widget / Live Activity，角色页/日记页立即可见
+            SettlementCoordinator.syncDisplayFromSimulated(service.engine)
+            WidgetCenter.shared.reloadAllTimelines()
+            text += "\n已同步展示快照并请求 Widget 刷新（当前 Widget 显示为模拟数据）"
+            simResult = text
+            refresh()
         } catch {
             simResult = "模拟结算失败：\(error.localizedDescription)"
         }

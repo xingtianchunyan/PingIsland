@@ -39,6 +39,13 @@ public enum SettlementCoordinator {
         return JSONFileSettlementStore(directory: base.appendingPathComponent("settlement", isDirectory: true))
     }
 
+    /// 调试桥（执行文档 13.1）：把模拟账本结算出的引擎状态同步到展示快照 / Widget / Live Activity，
+    /// 让"注入模拟事件"能验证完整展示链路。仅调试面板的模拟数据使用，生产 DeviceActivity 链路不经过这里。
+    public static func syncDisplayFromSimulated(_ engine: SettlementEngine) {
+        refreshSnapshot(from: engine, latestDelta: nil)
+        updateLiveActivity(from: engine)
+    }
+
     private static func seed() -> UInt64 {
         UInt64(SharedStore.defaults?.integer(forKey: "characterSeed.v1") ?? 0) + 1
     }

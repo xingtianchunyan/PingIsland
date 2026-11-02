@@ -173,3 +173,9 @@
 - 修复真机首启暴露的编译错误：RecoveryService.swift 缺 import PingIslandKit（TrainingGroup 未解析）
 - setup-swift@v2 无 6.4.2：规则引擎测试迁回 macos-26（公开库免费）
 - run 41399530958 全绿（Kit 95/95 + 模拟器测试 + Release 归档）；新 IPA 落 dist/PingIsland-unsigned.ipa
+
+## 2026-11-02 真机反馈修复二：模拟结算接通展示链路
+- 现象：调试面板注入模拟事件只有高水位+1，日记页/角色页/Widget 全无变化
+- 根因：模拟账本结算结果从未同步到展示快照——角色/日记/Widget 读的是生产快照，桥没搭
+- 修复：SettlementCoordinator 新增 syncDisplayFromSimulated(_:)（仅模拟数据用）；注入后同步快照 + WidgetCenter.reloadAllTimelines + Live Activity
+- 体验：同组同日同阈值重复注入会提示"无新增入账分钟（补差不倒退），调高阈值再试"；运行状态新增模拟高水位
