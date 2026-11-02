@@ -47,7 +47,10 @@ final class SimulatedUsageSourceTests: XCTestCase {
         if case .duplicate = outcome { XCTFail("首次模拟事件不应判重") }
 
         XCTAssertEqual(SimulatedUsageSource.eventCount(base: base), 1)
-        XCTAssertGreaterThan(service.engine.level, 1)
+        // 规则 v1.1：100 XP 升 1 级；60 分钟单事件（骰点 ≤10 时 ≤60 XP）不保证升级，
+        // 只断言成长入账且等级公式自洽。
+        XCTAssertGreaterThan(service.engine.growth.totalMilli, 0)
+        XCTAssertEqual(service.engine.level, 1 + service.engine.growth.integerGrowth / 100)
         // 模拟账本有文件，目录名带 simulated 标记
         XCTAssertTrue(FileManager.default.fileExists(atPath: simStore.directory.path))
     }
