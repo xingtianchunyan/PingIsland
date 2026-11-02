@@ -13,17 +13,14 @@ on:
 jobs:
   rules-test:
     name: 规则引擎 swift test
-    # Kit 无平台依赖，跑 Ubuntu（1× 计费）；macOS 10× 分钟留给真正需要它的两个任务
-    runs-on: ubuntu-latest
+    # 公开库 macOS 免费不限量；不折腾 Ubuntu setup-swift 版本清单
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
-      - name: 安装 Swift
-        uses: swift-actions/setup-swift@v2
-        with:
-          swift-version: "6.4.2"
       - name: 显示工具链版本
         run: |
-          uname -a
+          sw_vers
+          xcodebuild -version
           swift --version
       - name: 运行 PingIslandKit 单元测试
         working-directory: PingIslandKit

@@ -1,5 +1,6 @@
 import FamilyControls
 import Foundation
+import PingIslandKit
 
 /// 恢复动作（执行文档 13.3）：重新授权 + 按已保存分组重建监控。
 /// 设置页与恢复页共用同一入口，保证行为一致。
