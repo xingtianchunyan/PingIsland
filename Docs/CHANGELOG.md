@@ -227,4 +227,5 @@
 - 收藏页增强：品阶字体颜色（白/绿/蓝/紫/橙/红）、外观类型图标（布 tshirt/皮 半盾/铁 盾/机甲 cpu）、装备中条目显示获得时间+原因
 - EquipmentItem 新增 acquiredAt/origin（旧存档 decodeIfPresent 兼容）；快照新增 collectionDetail 结构化字段（旧快照回退字符串）
 - Kit 回归 101/101（成长/智慧/神谕新测试 6 例）
+- CI 修复两轮：DiaryView 补 `import PingIslandKit`（Rarity scope）；`SimulatedUsageSourceTests` 升级断言对齐 v1.1（60 分钟单事件不保证升级，改为断言成长入账 + 等级公式自洽）。Actions 三任务全绿（run 41495020893），IPA 已下载
 - 待做（下一批）：日记页"屏幕使用时间"式周/日分区展示；角色页六边形雷达 + 魔兽式装备/技能面板
