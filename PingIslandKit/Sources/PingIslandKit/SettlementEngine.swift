@@ -148,6 +148,10 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
             let appliedMilli = growth.settle(minutes: newMinutes, dice: dice, factor: factor)
             delta.growthMilliApplied = appliedMilli
             delta.newMinutes = newMinutes
+            // 执行文档 8.3：基础智慧 = 初始智慧 + G（按 G 的增量补，跨段小数不进位）
+            let growthPointsDelta = growth.totalMilli / 1000
+                - (growth.totalMilli - appliedMilli) / 1000
+            baseAttributes[.wis, default: 0] += Int(growthPointsDelta)
         }
 
         // 5.5 技能抽选：每个有效分钟一次逻辑抽选（9.6），按（种子、骰点、分钟序号、星期）确定性

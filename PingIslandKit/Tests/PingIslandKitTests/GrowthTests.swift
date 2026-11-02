@@ -51,3 +51,30 @@ final class GrowthTests: XCTestCase {
         XCTAssertEqual(g.level, 101)
     }
 }
+
+/// 执行文档 8.3「基础智慧 = 初始智慧 + G」经 SettlementEngine 的接入验证
+final class WisdomGrowthEngineTests: XCTestCase {
+    private var settleTime: Date { Date(timeIntervalSince1970: 1_762_000_000) }
+
+    func testWisdomGrowsWithGrowthPoints() {
+        var engine = SettlementEngine(groups: [.games], characterSeed: 7)
+        let initialWis = engine.baseAttributes[.wis] ?? 0
+        engine.process(UsageEvent(stableEventID: "w1", group: .games, thresholdMinutes: 30,
+                                  localDate: "2026-11-02", confirmedAt: settleTime))
+        // 30min × D≥10 → G≥30；智慧增量 = G（与成长点一致，不只给 1 点）
+        XCTAssertEqual(engine.baseAttributes[.wis], initialWis + Int(engine.level - 1))
+    }
+
+    func testWisdomIncrementMatchesAcrossSegments() {
+        var engine = SettlementEngine(groups: [.games], characterSeed: 7)
+        let initialWis = engine.baseAttributes[.wis] ?? 0
+        engine.process(UsageEvent(stableEventID: "w2", group: .games, thresholdMinutes: 30,
+                                  localDate: "2026-11-02", confirmedAt: settleTime))
+        let wisAfterFirst = engine.baseAttributes[.wis] ?? 0
+        engine.process(UsageEvent(stableEventID: "w3", group: .games, thresholdMinutes: 60,
+                                  localDate: "2026-11-02", confirmedAt: settleTime))
+        // 不变式：任意时刻 WIS = 初始智慧 + G；第二段只补 G 的增量
+        XCTAssertEqual(engine.baseAttributes[.wis], initialWis + Int(engine.level - 1))
+        XCTAssertGreaterThan(engine.baseAttributes[.wis] ?? 0, wisAfterFirst)
+    }
+}

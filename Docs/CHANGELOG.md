@@ -184,3 +184,9 @@
 - 现象：模拟结算后角色页/日记页正常，桌面小组件始终占位（等级1）
 - 定位：主 App 与 Widget 扩展靠 App Group 共享快照；主 App 内读写正常（两页即证明），扩展读不到 → Sideloadly 免费自签不解备 App Group（同 FamilyControls 一类签名限制）
 - 处置：调试面板运行状态新增"共享容器：可用/不可用"与"快照：vN 等级X"诊断行；KNOWN_LIMITATIONS 记录限制与替代签名方式（付费账号 / SideStore）
+
+## 2026-11-02 真机反馈修复四：智慧成长规则 + Live Activity 声明
+- 数值答疑：31 级是设计本意（文档 8.3 验收例：30 分钟骰点 15 → 等级 50）；升级不加 CON/INT/DEX 也是设计
+- 但「基础智慧 = 初始智慧 + G」（文档 8.3）代码漏实现：SettlementEngine 第 5 步补 WIS 增量（按 G 的增量补，跨段小数不进位）
+- 新增 WisdomGrowthEngineTests 2 例（不变式：任意时刻 WIS = 初始 + G）；Kit 回归 97/97
+- Live Activity 点击无反应：主 App 与 Widget 扩展 Info.plist 缺 NSSupportsLiveActivities → 补声明（真机确认行为）
