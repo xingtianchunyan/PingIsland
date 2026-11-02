@@ -154,3 +154,10 @@
 - SettlementDelta 新增 skillDraws 字段
 - 新增 SkillEngineIntegrationTests（4 例）：跨引擎序列确定性、与独立重建一致、旧 JSON 解码兼容、跨天星期归档
 - 本地 Kit 回归 95/95 通过
+
+## 2026-11-02 真机反馈修复：首启授权降级 + Debug 面板可见
+- 首启新增"暂不授权，先进入应用"降级路径（欢迎页 + 授权失败错误处）：保存分组与角色种子，跳过监控注册；无监控、无虚构成长，设置页可重新授权（真机确认自签环境 FamilyControls 报"无法与帮助程序通信"）
+- 未授权时组选择页不再显示空白 FamilyActivityPicker，改为提示文案与跳过
+- 汇总页全空时给出无监控模式说明
+- 移除 Debug 面板全部 #if DEBUG 条件编译：Release IPA（CI 产物）也可见，自测期间用模拟数据体验全功能；模拟账本与真实账本隔离
+- 反馈登记：Docs/PLATFORM_VALIDATION.md F-1~F-7；已知限制更新：Docs/KNOWN_LIMITATIONS.md

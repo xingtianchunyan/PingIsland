@@ -25,13 +25,12 @@ struct SettingsView: View {
                     Text("屏之岛 0.1.0 (1) — MVP 引导版")
                         .foregroundStyle(.secondary)
                 }
-                #if DEBUG
                 Section("内部测试") {
+                    // Release IPA（CI 产物）也需要此面板做真机验证；模拟源账本独立隔离，不影响真实数据
                     NavigationLink("调试面板（含模拟数据）") {
                         DebugPanelView()
                     }
                 }
-                #endif
             }
             .navigationTitle("设置")
         }

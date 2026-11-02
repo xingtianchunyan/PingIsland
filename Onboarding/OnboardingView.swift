@@ -40,11 +40,14 @@ struct OnboardingView: View {
             Text("🏝️").font(.system(size: 64))
             Text("欢迎来到屏之岛")
                 .font(.title)
-            Text("你正常使用手机，岛上的角色会依据**已确认的使用里程碑**自动成长。无需每日领取，无需手动操作。\n\n接下来请为八个修行组各选择一些 App；同一个 App 只能属于一个组。")
+            Text("你正常使用手机，岛上的角色会依据**已确认的使用里程碑**自动成长。无需每日领取，无需手动操作。\n\n接下来请为八个修行组各选择一些 App；同一个 App 只能属于一个组。\n\n（自签/侧载环境下屏幕使用时间授权可能不可用，可先跳过进入应用，稍后在设置页重新授权。）")
                 .font(.body)
                 .foregroundStyle(.secondary)
             Button("开始选择") { step = 1 }
                 .buttonStyle(.borderedProminent)
+            Button("暂不授权，先进入应用") { enterWithoutAuthorization() }
+                .buttonStyle(.bordered)
+                .font(.callout)
         }
     }
 
@@ -58,6 +61,7 @@ struct OnboardingView: View {
                 selections[group] = GroupSelection.sanitized(newValue, for: group, existing: selections)
             })
 
+        let authorized = AuthorizationCenter.shared.authorizationStatus == .approved
         return VStack(spacing: 12) {
             VStack(spacing: 4) {
                 Text("第 \(step) / \(groups.count) 组")
@@ -66,7 +70,15 @@ struct OnboardingView: View {
                 Text("情境倾向：\(group.inclination.rawValue) · 对应职业：\(group.correspondingClass.rawValue)")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            FamilyActivityPicker(selection: binding)
+            if authorized {
+                FamilyActivityPicker(selection: binding)
+            } else {
+                // 未授权（自签环境常见）：无法列出具体 App，直接跳过即可
+                Text("尚未获得屏幕使用时间授权，无法列出 App。\n可依次跳过，进入应用后可在设置页重新授权。")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Spacer()
+            }
             HStack {
                 Button("上一组") { step -= 1 }.disabled(step == 1)
                 Spacer()
@@ -82,6 +94,13 @@ struct OnboardingView: View {
         VStack(spacing: 16) {
             Text("修行组汇总").font(.title2)
             List {
+                let total = selections.values.reduce(0) {
+                    $0 + $1.applicationTokens.count + $1.categoryTokens.count + $1.webDomainTokens.count
+                }
+                if total == 0 {
+                    Text("尚未选择任何 App。进入后将处于无监控模式，可在设置页的调试面板用模拟数据体验全部功能。")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
                 ForEach(Array(selections.keys), id: \.self) { group in
                     let s = selections[group] ?? FamilyActivitySelection()
                     let count = s.applicationTokens.count + s.categoryTokens.count
@@ -94,6 +113,8 @@ struct OnboardingView: View {
             .listStyle(.plain)
             if !errorText.isEmpty {
                 Text(errorText).foregroundStyle(.red).font(.caption)
+                Button("暂不授权，进入应用（稍后可重新授权）") { enterWithoutAuthorization() }
+                    .font(.callout)
             }
             Button("完成设置") { finish() }
                 .buttonStyle(.borderedProminent)
@@ -107,14 +128,20 @@ struct OnboardingView: View {
                 case .success:
                     persistAndRegister()
                 case .failure(let error):
-                    // 授权失败：允许查看说明，不生成虚构成长（执行文档 5.1/13.3）
+                    // 授权失败：允许跳过进入应用（自签环境帮助程序通信失败属已知限制），不生成虚构成长
                     errorText = "授权未完成：\(error.localizedDescription)。可稍后在设置中重新授权。"
                 }
             }
         }
     }
 
-    private func persistAndRegister() {
+    /// 降级进入（执行文档 13.3 精神）：无授权 = 无监控无真实成长；
+    /// 保存分组与角色种子，跳过监控注册，之后可用调试面板的模拟数据体验。
+    private func enterWithoutAuthorization() {
+        persistAndRegister(skipMonitoring: true)
+    }
+
+    private func persistAndRegister(skipMonitoring: Bool = false) {
         // 保存分组（version 递增，供归属与重建使用）
         var state = GroupSelection.State()
         for (group, s) in selections {
@@ -129,8 +156,10 @@ struct OnboardingView: View {
                                       forKey: "characterSeed.v1")
         }
 
-        // 注册监控（每组独立活动与事件）
-        MonitoringRegistrar.register(selections: selections)
+        // 注册监控（每组独立活动与事件）；跳过授权时不注册，稍后可在设置页重建
+        if !skipMonitoring {
+            MonitoringRegistrar.register(selections: selections)
+        }
         SnapshotIO.save(DisplaySnapshot())
         onComplete()
     }

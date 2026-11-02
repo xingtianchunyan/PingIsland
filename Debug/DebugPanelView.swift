@@ -5,9 +5,8 @@ import PingIslandKit
 import SwiftUI
 import WidgetKit
 
-/// 调试面板（执行文档 13.1）。仅 DEBUG 构建编译；Release 不含模拟入口。
+/// 调试面板（执行文档 13.1）。自测期间全构建可见（Release IPA 是真机验证载体）；
 /// 模拟事件经 SimulatedUsageSource 进入独立账本，不与生产 DeviceActivity 账本混写。
-#if DEBUG
 struct DebugPanelView: View {
     @State private var simGroup: TrainingGroup = .games
     @State private var simMinutes = 30
@@ -190,4 +189,3 @@ struct DebugPanelView: View {
         return f.string(from: date)
     }
 }
-#endif
