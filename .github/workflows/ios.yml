@@ -13,7 +13,7 @@ on:
 jobs:
   rules-test:
     name: 规则引擎 swift test
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
       - name: 显示工具链版本
@@ -27,7 +27,7 @@ jobs:
 
   simulator-test:
     name: 模拟器集成/UI 测试
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
       - name: 安装 XcodeGen
@@ -54,7 +54,7 @@ jobs:
 
   ios-build:
     name: 构建未签名 IPA
-    runs-on: macos-15
+    runs-on: macos-26
     needs: [rules-test, simulator-test]
     steps:
       - uses: actions/checkout@v4
