@@ -86,6 +86,18 @@ public enum SettlementCoordinator {
                 .map { item in
                     let worn = item.isEquipped ? " · 装备中" : ""
                     return SnapshotPresentation.equipmentSummary(item) + worn
+                },
+            collectionDetail: engine.equipment
+                .sorted { ($0.rarity != $1.rarity) ? $0.rarity > $1.rarity : $0.id < $1.id }
+                .map { item in
+                    DisplaySnapshot.CollectionDetail(
+                        text: SnapshotPresentation.equipmentSummary(item),
+                        rarity: item.rarity.rawValue,
+                        isEquipped: item.isEquipped,
+                        acquiredAt: item.acquiredAt,
+                        origin: item.origin,
+                        appearance: EquipmentAppearance.appearanceType(
+                            finalWisdom: engine.finalAttributes()[.wis, default: 0]))
                 })
         SnapshotIO.save(snapshot)
     }

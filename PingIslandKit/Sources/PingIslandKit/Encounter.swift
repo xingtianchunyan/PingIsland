@@ -14,6 +14,7 @@ public enum DiaryEntryType: String, Codable, Sendable {
     case monsterWin
     case monsterLose
     case dailyLife
+    case oracleBoon // 骰点 20 神谕大成功（每日一次）
 }
 
 public struct EncounterResult: Equatable, Sendable {
@@ -85,6 +86,9 @@ public enum DiaryText {
             if parts.count == 2, let monster = Monster(rawValue: parts[0]) {
                 return parts[1] == "win" ? monster.winText : monster.loseText
             }
+        }
+        if key == "oracle.boon" {
+            return "☀️ 骰点 20 大成功·神谕降临"
         }
         if key.hasPrefix("dailylife.") {
             let index = Int(key.dropFirst("dailylife.".count)) ?? -1

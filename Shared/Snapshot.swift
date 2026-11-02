@@ -40,13 +40,31 @@ public struct DisplaySnapshot: Codable, Equatable {
     public var recentDiaries: [String]?
     /// 收藏页：装备藏品清单（品阶降序，预格式化）
     public var collection: [String]?
+    /// 收藏页结构化详情（颜色/图标/获得时间来源用；nil = 旧快照，回退 collection 字符串）
+    public var collectionDetail: [CollectionDetail]?
+
+    /// 收藏条目结构化展示数据（执行文档 5.3-3 增强展示）
+    public struct CollectionDetail: Equatable, Codable, Sendable {
+        /// 预格式化主文案（部位 · 品阶 · 词条（评 N））
+        public var text: String
+        /// 稀有度（Rarity rawValue；UI 映射字体颜色）
+        public var rarity: Int
+        public var isEquipped: Bool
+        /// 获得时间（"从何时获得"）
+        public var acquiredAt: Date?
+        /// 获得原因（"因何事获得"）
+        public var origin: String?
+        /// 外观类型（布甲/皮甲/铁甲/机甲，图标用）
+        public var appearance: String?
+    }
 
     public init(level: Int = 1, className: String = "觉醒中",
                 fatigueStage: Int = 0, recentEvent: String = "等待第一次结算",
                 lastSettlementAt: Date? = nil, snapshotVersion: Int = 1,
                 displayPriority: Int? = nil, bannerText: String? = nil,
                 attributes: [String: Int]? = nil, equipment: [String]? = nil,
-                recentDiaries: [String]? = nil, collection: [String]? = nil) {
+                recentDiaries: [String]? = nil, collection: [String]? = nil,
+                collectionDetail: [CollectionDetail]? = nil) {
         self.level = level
         self.className = className
         self.fatigueStage = fatigueStage
@@ -58,6 +76,7 @@ public struct DisplaySnapshot: Codable, Equatable {
         self.attributes = attributes
         self.equipment = equipment
         self.recentDiaries = recentDiaries
+        self.collectionDetail = collectionDetail
         self.collection = collection
     }
 

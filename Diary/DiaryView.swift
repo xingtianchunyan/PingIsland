@@ -25,14 +25,21 @@ struct DiaryView: View {
     }
 }
 
-/// 收藏页（执行文档 5.3-3）：装备藏品，探索中自动发现，无需手动领取
+/// 收藏页（执行文档 5.3-3）：装备藏品，探索中自动发现，无需手动领取。
+/// 展示：品阶决定字体颜色；外观类型（布/皮/铁/机甲）配图标；装备中带获得时间与原因。
 struct CollectionView: View {
     @State private var snapshot: DisplaySnapshot = SnapshotIO.load() ?? DisplaySnapshot()
 
     var body: some View {
         NavigationStack {
             List {
-                if let collection = snapshot.collection, !collection.isEmpty {
+                if let details = snapshot.collectionDetail, !details.isEmpty {
+                    Section("装备藏品（\(details.count)）") {
+                        ForEach(Array(details.enumerated()), id: \.offset) { _, entry in
+                            CollectionEntryRow(entry: entry)
+                        }
+                    }
+                } else if let collection = snapshot.collection, !collection.isEmpty {
                     Section("装备藏品（\(collection.count)）") {
                         ForEach(collection, id: \.self) { Text($0).font(.callout) }
                     }
@@ -45,6 +52,55 @@ struct CollectionView: View {
             .onAppear {
                 SettlementCoordinator.settlePending()
                 snapshot = SnapshotIO.load() ?? DisplaySnapshot()
+            }
+        }
+    }
+}
+
+private struct CollectionEntryRow: View {
+    let entry: DisplaySnapshot.CollectionDetail
+
+    /// 品阶 → 字体颜色（白/绿/蓝/紫/橙/红）
+    private var rarityColor: Color {
+        switch Rarity(rawValue: entry.rarity) {
+        case .green: return .green
+        case .blue: return .blue
+        case .purple: return .purple
+        case .orange: return .orange
+        case .red: return .red
+        default: return .primary // 白装
+        }
+    }
+
+    /// 外观类型 → 图标（布/皮/铁/机甲）
+    private var appearanceIcon: String {
+        switch entry.appearance {
+        case "皮甲": return "shield.lefthalf.filled"
+        case "铁甲": return "shield.fill"
+        case "机甲": return "cpu"
+        default: return "tshirt.fill" // 布甲
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: appearanceIcon)
+                .font(.title3)
+                .foregroundStyle(rarityColor)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(entry.text).font(.callout).foregroundStyle(rarityColor)
+                    if entry.isEquipped {
+                        Label("装备中", systemImage: "checkmark.seal.fill")
+                            .font(.caption2).foregroundStyle(.cyan)
+                    }
+                }
+                if let at = entry.acquiredAt {
+                    Text("获得于 \(at.formatted(date: .abbreviated, time: .shortened))"
+                         + (entry.origin.map { " · \($0)" } ?? ""))
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
             }
         }
     }

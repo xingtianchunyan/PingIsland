@@ -1,3 +1,5 @@
+import Foundation
+
 /// 装备生成与自动择优（执行文档 9.4）。
 
 public struct Affix: Equatable, Codable, Sendable {
@@ -13,8 +15,39 @@ public struct EquipmentItem: Equatable, Codable, Sendable, Identifiable {
     public var affixes: [Affix]
     /// 是否当前装备（自动择优结果）
     public var isEquipped: Bool
+    /// 获得时间（首次入账时记录，展示"从何时获得"）
+    public var acquiredAt: Date?
+    /// 获得原因（如"探索获得"，展示"因何事获得"）
+    public var origin: String?
 
     public var totalValue: Int { affixes.reduce(0) { $0 + $1.value } }
+
+    public init(id: Int, slot: EquipmentSlot, rarity: Rarity, affixes: [Affix],
+                isEquipped: Bool, acquiredAt: Date? = nil, origin: String? = nil) {
+        self.id = id
+        self.slot = slot
+        self.rarity = rarity
+        self.affixes = affixes
+        self.isEquipped = isEquipped
+        self.acquiredAt = acquiredAt
+        self.origin = origin
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, slot, rarity, affixes, isEquipped, acquiredAt, origin
+    }
+
+    /// 旧版本存档无 acquiredAt/origin 键：按 nil 兼容解码，其余字段照原要求
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        slot = try c.decode(EquipmentSlot.self, forKey: .slot)
+        rarity = try c.decode(Rarity.self, forKey: .rarity)
+        affixes = try c.decode([Affix].self, forKey: .affixes)
+        isEquipped = try c.decode(Bool.self, forKey: .isEquipped)
+        acquiredAt = try c.decodeIfPresent(Date.self, forKey: .acquiredAt)
+        origin = try c.decodeIfPresent(String.self, forKey: .origin)
+    }
 }
 
 public enum EquipmentRules {

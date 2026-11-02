@@ -47,11 +47,11 @@ public struct GrowthAccumulator: Equatable, Codable, Sendable {
         return segmentMilli
     }
 
-    /// 整数成长点 G
+    /// 整数成长点 G（XP；1 XP = 1000 milli）
     public var integerGrowth: Int64 { totalMilli / 1000 }
 
-    /// 角色等级 = 1 + G
-    public var level: Int64 { 1 + integerGrowth }
+    /// 角色等级（规则 v1.1 修订：100 XP 升 1 级，替代 v1.0 的 1 XP = 1 级）
+    public var level: Int64 { 1 + integerGrowth / 100 }
 
     /// 小数余量（千分之一），如 0.5 → 500，跨段保留
     public var remainderMilli: Int64 { totalMilli % 1000 }

@@ -125,7 +125,7 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
         let luckSnapshot = finalAttributes()[.luk, default: 1]
         let dice = segment.ensureDice(luckSnapshot: luckSnapshot, rng: &diceRng).value
 
-        // 4. 骰点 20：建段时立即发放一次神谕奖励（每日一次）
+        // 4. 骰点 20：建段时立即发放一次神谕奖励（每日一次），日记明确记录大成功
         if dice >= 20 {
             var oracleRng = SeededRandom(seed: fnv1a64("oracle|\(event.localDate)"))
             if segment.tryIssueOracleReward() {
@@ -134,6 +134,10 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
                     oracleRng.nextInt(upperBound: RulesConfig.oraclePackAttributes.count)]
                 baseAttributes[attr, default: 0] += amount
                 delta.oracleIssued = true
+                delta.diaries.append(DiaryRecord(
+                    recordedAt: event.confirmedAt, group: event.group,
+                    entryType: .oracleBoon, textKey: "oracle.boon",
+                    rewardSummary: "神谕奖励 +\(amount) \(attr.rawValue)"))
             }
         }
 
@@ -148,10 +152,11 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
             let appliedMilli = growth.settle(minutes: newMinutes, dice: dice, factor: factor)
             delta.growthMilliApplied = appliedMilli
             delta.newMinutes = newMinutes
-            // 执行文档 8.3：基础智慧 = 初始智慧 + G（按 G 的增量补，跨段小数不进位）
-            let growthPointsDelta = growth.totalMilli / 1000
-                - (growth.totalMilli - appliedMilli) / 1000
-            baseAttributes[.wis, default: 0] += Int(growthPointsDelta)
+            // 规则 v1.1：基础智慧 = 初始智慧 +（等级 − 1），每升 1 级 +1 智慧；
+            // 按等级增量补（100 XP 一级，跨段余量不进位）
+            let newLevel = growth.level
+            let oldLevel = 1 + (growth.totalMilli - appliedMilli) / 100_000
+            baseAttributes[.wis, default: 0] += Int(newLevel - oldLevel)
         }
 
         // 5.5 技能抽选：每个有效分钟一次逻辑抽选（9.6），按（种子、骰点、分钟序号、星期）确定性
@@ -179,7 +184,8 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
             let charm = finalAttributes()[.cha, default: 0]
             let reward = ExplorationRules.resolve(dice: dice, finalCharm: charm,
                                                   equipmentID: &equipmentID, rng: &exploreRng)
-            apply(reward)
+            apply(reward, recordedAt: event.confirmedAt,
+                  origin: "探索获得·\(event.thresholdMinutes) 分钟里程碑")
             delta.explorations.append(reward)
 
             var encRng = SeededRandom(seed: fnv1a64("encounter|\(event.stableEventID)"))
@@ -230,11 +236,13 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
 
     // MARK: - 内部
 
-    private mutating func apply(_ reward: ExplorationReward) {
+    private mutating func apply(_ reward: ExplorationReward, recordedAt: Date, origin: String) {
         for (attr, points) in reward.attributePoints {
             baseAttributes[attr, default: 0] += points
         }
         for var item in reward.equipment {
+            item.acquiredAt = recordedAt
+            item.origin = origin
             if let current = equipped[item.slot],
                !EquipmentRules.shouldEquip(newItem: item, current: current) {
                 item.isEquipped = false

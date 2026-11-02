@@ -41,3 +41,57 @@ final class DiceTests: XCTestCase {
         XCTAssertNotNil(segment.dice)
     }
 }
+
+/// 骰点 20 神谕：引擎发放奖励且日记明确记录大成功（真机反馈 9-4）
+final class OracleDiaryTests: XCTestCase {
+    private var settleTime: Date { Date(timeIntervalSince1970: 1_762_000_000) }
+
+    /// 找到一个该种子下骰点为 20 的日期（确定性循环，不依赖运气）
+    private func findDiceTwentyDate(seed: UInt64) -> String {
+        var day = Date(timeIntervalSince1970: 1_762_000_000)
+        let calendar = Calendar(identifier: .gregorian)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.calendar = calendar
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        for _ in 0..<5000 {
+            let dateString = formatter.string(from: day)
+            var rng = SeededRandom(seed: fnv1a64("dice|\(dateString)") &+ seed)
+            if DiceRules.roll(luckSnapshot: 1, rng: &rng).value == 20 { return dateString }
+            day = calendar.date(byAdding: .day, value: 1, to: day) ?? day
+        }
+        XCTFail("5000 天内未找到骰点 20 的日期")
+        return "2026-11-02"
+    }
+
+    func testDiceTwentyIssuesOracleAndWritesDiary() {
+        let seed: UInt64 = 7
+        let date = findDiceTwentyDate(seed: seed)
+        var engine = SettlementEngine(groups: [.games], characterSeed: seed)
+        let outcome = engine.process(UsageEvent(stableEventID: "oracle-1", group: .games,
+                                              thresholdMinutes: 5, localDate: date,
+                                              confirmedAt: settleTime))
+        guard case .settled(let delta) = outcome else { return XCTFail("应结算成功") }
+        XCTAssertTrue(delta.oracleIssued)
+        // 日记必须有明确的大成功记录（文案 + 奖励数值）
+        let oracleEntries = engine.diary.filter { $0.entryType == .oracleBoon }
+        XCTAssertEqual(oracleEntries.count, 1)
+        XCTAssertEqual(oracleEntries.first?.textKey, "oracle.boon")
+        XCTAssertTrue(oracleEntries.first?.rewardSummary.contains("神谕奖励") ?? false)
+        XCTAssertTrue(DiaryText.display("oracle.boon").contains("大成功"))
+    }
+
+    func testOracleOncePerDayOnly() {
+        let seed: UInt64 = 7
+        let date = findDiceTwentyDate(seed: seed)
+        var engine = SettlementEngine(groups: [.games], characterSeed: seed)
+        engine.process(UsageEvent(stableEventID: "o1", group: .games, thresholdMinutes: 5,
+                                  localDate: date, confirmedAt: settleTime))
+        let second = engine.process(UsageEvent(stableEventID: "o2", group: .games,
+                                               thresholdMinutes: 10, localDate: date,
+                                               confirmedAt: settleTime))
+        guard case .settled(let delta) = second else { return XCTFail("应结算成功") }
+        XCTAssertFalse(delta.oracleIssued) // 每日一次
+        XCTAssertEqual(engine.diary.filter { $0.entryType == .oracleBoon }.count, 1)
+    }
+}

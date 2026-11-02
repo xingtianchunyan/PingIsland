@@ -9,7 +9,7 @@
 
 | 项 | 状态 | 证据 |
 |---|---|---|
-| Windows Swift 工具链 6.4.2 + SDKROOT | 已完成 | swift test 本地 97/97 |
+| Windows Swift 工具链 6.4.2 + SDKROOT | 已完成 | swift test 本地 101/101 |
 | XcodeGen 五 Target 工程 | 已完成 | project.yml，CI 构建通过 |
 | App Group group.com.pingisland.shared | 已完成 | SharedStore，entitlements |
 | 私有仓库 + CI 三任务 | 已完成 | run 41344818829 全绿（故障前） |
