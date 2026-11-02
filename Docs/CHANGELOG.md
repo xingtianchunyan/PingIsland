@@ -167,3 +167,9 @@
 - 私有库 macOS 按 10× 计费：前期两个全绿 run 加多次长时重试已耗尽额度
 - 工作流优化：规则引擎 swift test 迁到 ubuntu-latest（1× 计费），macOS 只留给模拟器测试与 IPA 构建
 - 待账号侧决策：仓库转公开 / 等账单周期重置 / 升级付费（见 KNOWN_LIMITATIONS 同款说明）
+
+## 2026-11-02 仓库转公开后 CI 全面恢复
+- 账号额度根因确认后仓库转公开（行天拍板）：公开库 Actions 免费不限量，runner 立即恢复分配
+- 修复真机首启暴露的编译错误：RecoveryService.swift 缺 import PingIslandKit（TrainingGroup 未解析）
+- setup-swift@v2 无 6.4.2：规则引擎测试迁回 macos-26（公开库免费）
+- run 41399530958 全绿（Kit 95/95 + 模拟器测试 + Release 归档）；新 IPA 落 dist/PingIsland-unsigned.ipa
