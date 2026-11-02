@@ -1,3 +1,4 @@
+import PingIslandKit
 import SwiftUI
 
 /// 日记页（执行文档 5.3-2 / 9.7）：按时间展示已结算片段，只读快照
