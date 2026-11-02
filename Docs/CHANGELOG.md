@@ -190,3 +190,7 @@
 - 但「基础智慧 = 初始智慧 + G」（文档 8.3）代码漏实现：SettlementEngine 第 5 步补 WIS 增量（按 G 的增量补，跨段小数不进位）
 - 新增 WisdomGrowthEngineTests 2 例（不变式：任意时刻 WIS = 初始 + G）；Kit 回归 97/97
 - Live Activity 点击无反应：主 App 与 Widget 扩展 Info.plist 缺 NSSupportsLiveActivities → 补声明（真机确认行为）
+
+## 2026-11-02 真机反馈修复五：灵动岛可见性
+- 诊断：锁屏已出现实时活动与系统授权弹窗（活动本身启动成功）；灵动岛"无内容"主因是 App 在前台时系统不在灵动岛展示本 App 的活动（iOS 行为），加上多次启动堆叠了多个活动
+- 修复：启动前先结束旧活动（11.3 同一时刻一个活动）
