@@ -161,3 +161,9 @@
 - 汇总页全空时给出无监控模式说明
 - 移除 Debug 面板全部 #if DEBUG 条件编译：Release IPA（CI 产物）也可见，自测期间用模拟数据体验全功能；模拟账本与真实账本隔离
 - 反馈登记：Docs/PLATFORM_VALIDATION.md F-1~F-7；已知限制更新：Docs/KNOWN_LIMITATIONS.md
+
+## 2026-11-02 CI 故障根因定位：账号 Actions 额度耗尽（非镜像退役）
+- 证据链：全新私有探针仓库 hello-world 同样 runner_id=0 秒挂（账号级，非仓库/工作流级）；macos-14 退役不适用（本仓库早已用 macos-15，试切 macos-26 亦失败）；官方社区同症状案例确认是 Free 私有库 2000 分钟额度耗尽 + 默认 $0 支出上限 → 调度层直接拒绝分配 runner
+- 私有库 macOS 按 10× 计费：前期两个全绿 run 加多次长时重试已耗尽额度
+- 工作流优化：规则引擎 swift test 迁到 ubuntu-latest（1× 计费），macOS 只留给模拟器测试与 IPA 构建
+- 待账号侧决策：仓库转公开 / 等账单周期重置 / 升级付费（见 KNOWN_LIMITATIONS 同款说明）
