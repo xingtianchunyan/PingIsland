@@ -50,3 +50,7 @@ enable-wmp.ps1
 swift-6.4.2-*.exe
 dl-swift.ps1
 环境配置报告.md
+jobs*.json
+log-*.txt
+run*.json
+faillog*.txt
