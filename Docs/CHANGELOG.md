@@ -179,3 +179,8 @@
 - 根因：模拟账本结算结果从未同步到展示快照——角色/日记/Widget 读的是生产快照，桥没搭
 - 修复：SettlementCoordinator 新增 syncDisplayFromSimulated(_:)（仅模拟数据用）；注入后同步快照 + WidgetCenter.reloadAllTimelines + Live Activity
 - 体验：同组同日同阈值重复注入会提示"无新增入账分钟（补差不倒退），调高阈值再试"；运行状态新增模拟高水位
+
+## 2026-11-02 真机反馈修复三：小组件不同步的根因与诊断
+- 现象：模拟结算后角色页/日记页正常，桌面小组件始终占位（等级1）
+- 定位：主 App 与 Widget 扩展靠 App Group 共享快照；主 App 内读写正常（两页即证明），扩展读不到 → Sideloadly 免费自签不解备 App Group（同 FamilyControls 一类签名限制）
+- 处置：调试面板运行状态新增"共享容器：可用/不可用"与"快照：vN 等级X"诊断行；KNOWN_LIMITATIONS 记录限制与替代签名方式（付费账号 / SideStore）

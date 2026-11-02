@@ -84,6 +84,17 @@ struct DebugPanelView: View {
         var lines: [String] = []
         lines.append("授权：\(authStatusText)")
         lines.append("App Group：\(SharedStore.appGroup)")
+        if let container = FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroup) {
+            lines.append("共享容器：可用（\(container.path)）")
+        } else {
+            lines.append("共享容器：不可用（签名未授权 App Group——小组件将无法同步）")
+        }
+        if let snapshot = SnapshotIO.load() {
+            lines.append("快照：v\(snapshot.snapshotVersion) 等级 \(snapshot.level)")
+        } else {
+            lines.append("快照：不可读（尚未保存过）")
+        }
         lines.append("账本格式：JSON v1（状态+日志，原子写）")
         if let at = SharedStore.defaults?.object(forKey: SharedStore.Keys.monitorRegisteredAt) as? Date {
             lines.append("监控注册：\(at)")
