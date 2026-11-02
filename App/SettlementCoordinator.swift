@@ -70,7 +70,8 @@ public enum SettlementCoordinator {
             snapshotVersion: (SnapshotIO.load()?.snapshotVersion ?? 0) + 1,
             displayPriority: priority.rawValue,
             bannerText: PresentationPolicy.banner(for: priority, input: priorityInput),
-            attributes: engine.baseAttributes.reduce(into: [String: Int]()) {
+            // 展示最终属性（含已装备词条加成），否则角色面板与装备栏对不上
+            attributes: engine.finalAttributes().reduce(into: [String: Int]()) {
                 $0[$1.key.rawValue] = $1.value
             },
             equipment: engine.equipped
