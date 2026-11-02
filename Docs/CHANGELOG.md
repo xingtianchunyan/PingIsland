@@ -203,3 +203,8 @@
 - iPhone 18 Pro Max / iOS 27.0.1（Sideloadly 免费自签）：Live Activity 启动、桌面灵动岛紧凑态（🏝️+Lv）、锁屏卡片与长按展开全部通过
 - 修复路上共定位三个真 bug：缺 NSSupportsLiveActivities 声明（Info.plist）、清理旧活动的异步竞态杀新活动、模拟结算未接展示链路
 - 至此规则循环（结算→快照→灵动岛/锁屏/页面）在真机完整跑通；桌面小组件受 App Group 签名限制、真实监控受 Family Controls 签名限制，均需付费账号或换签名方式
+
+## 2026-11-02 真机反馈修复七：装备展示显示具体词条
+- 现象：装备只显示"白装 · 部位 · 评 N"，看不出加什么属性；用户疑惑白装是否生效
+- 澄清：生成规则本就正确（白装=1 条随机 CON/INT/DEX +1，文档 9.4）；缺的是展示
+- 修复：SnapshotPresentation.equipmentSummary 统一格式化"部位 · 品阶 · CON +1、INT +2（评 N）"，装备栏与收藏页同时生效；新增格式化测试 2 断言组

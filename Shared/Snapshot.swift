@@ -110,6 +110,14 @@ public enum SnapshotIO {
 
 /// 展示层格式化助手（执行文档 9.4/9.5 品阶文案）
 public enum SnapshotPresentation {
+    /// 装备展示：部位 · 品阶 · 具体词条（白装也显示 +1 随机基础属性；多条词条顿号分隔）
+    public static func equipmentSummary(_ item: EquipmentItem) -> String {
+        let affixText = item.affixes
+            .map { "\($0.attribute.rawValue) +\($0.value)" }
+            .joined(separator: "、")
+        return "\(item.slot.rawValue) · \(rarityName(item.rarity)) · \(affixText)（评 \(item.totalValue)）"
+    }
+
     public static func rarityName(_ rarity: Rarity) -> String {
         switch rarity {
         case .white: return "白装"

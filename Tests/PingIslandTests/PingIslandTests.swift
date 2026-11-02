@@ -1,3 +1,4 @@
+import PingIslandKit
 import XCTest
 @testable import PingIsland
 
@@ -36,5 +37,23 @@ final class PingIslandTests: XCTestCase {
     func testFatigueTextMapping() {
         XCTAssertEqual(DisplaySnapshot(fatigueStage: 0).fatigueText, "精神饱满")
         XCTAssertEqual(DisplaySnapshot(fatigueStage: 4).fatigueText, "休眠")
+    }
+
+    /// 装备展示须显示具体词条属性与数值（白装也应有 +1 基础词条，执行文档 9.4）
+    func testEquipmentSummaryShowsConcreteAffixes() {
+        var rng = SeededRandom(seed: 5)
+        let white = EquipmentRules.generate(id: 1, rarity: .white, rng: &rng)
+        let summary = SnapshotPresentation.equipmentSummary(white)
+        XCTAssertTrue(summary.contains("白装"), summary)
+        XCTAssertTrue(summary.contains("+1"), summary) // 白装固定 1 条基础词条 ×1
+        XCTAssertTrue(summary.contains(white.slot.rawValue), summary)
+        XCTAssertTrue(summary.contains(white.affixes[0].attribute.rawValue), summary)
+        XCTAssertTrue(summary.contains("评 \(white.totalValue)"), summary)
+
+        var rng2 = SeededRandom(seed: 9)
+        let purple = EquipmentRules.generate(id: 2, rarity: .purple, rng: &rng2)
+        let pSummary = SnapshotPresentation.equipmentSummary(purple)
+        XCTAssertTrue(pSummary.contains("紫装"), pSummary)
+        XCTAssertEqual(purple.affixes.count, 4) // 3 基础 + 1 高级
     }
 }
