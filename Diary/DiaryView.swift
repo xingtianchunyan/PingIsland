@@ -96,8 +96,7 @@ private struct WeekSummaryCard: View {
             HStack(alignment: .firstTextBaseline) {
                 Text("本周").font(.headline)
                 Spacer()
-                Text("\(week.weekStart, format: .dateTime.month(.defaultDigits).day())"
-                     + " – \(endTitle)")
+                Text(weekRangeTitle)
                     .font(.caption).foregroundStyle(.secondary)
             }
             HStack(alignment: .lastTextBaseline, spacing: 6) {
@@ -133,6 +132,11 @@ private struct WeekSummaryCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemGroupedBackground),
                     in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var weekRangeTitle: String {
+        let start = week.weekStart.formatted(.dateTime.month(.defaultDigits).day())
+        return "\(start) – \(endTitle)"
     }
 
     private var endTitle: String {
