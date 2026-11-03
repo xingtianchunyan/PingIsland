@@ -1,26 +1,23 @@
 import PingIslandKit
 import SwiftUI
 
-/// 角色主页（执行文档 5.3-1，行天改版：足球游戏六边形属性 + 魔兽装备面板风格）：
-/// 中上 = 职业 / 等级 / 最新日记；正中 = 角色形象（左装备栏 · 形象 · 右特质栏）；
-/// 中下 = 六边形属性雷达；只读展示快照，无"领取"类操作。
+/// 角色主页（执行文档 5.3-1，行天改版 v2：全部元素集中于一张角色卡）：
+/// 行1 = 状态 · 职业 · 等级（居中一行）；行2 = 最新日记 + 最近结算（整体居中）；
+/// 行3 = 左装备栏 · 角色立绘 · 右特质栏；行4 = 六边形属性雷达。只读展示快照。
 struct CharacterHomeView: View {
     @State private var snapshot: DisplaySnapshot = SnapshotIO.load() ?? DisplaySnapshot()
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 18) {
-                    headerSection
-                    heroSection
-                    AttributeRadarCard(attributes: snapshot.attributes ?? [:])
-                    statusSection
+                VStack(spacing: 14) {
+                    CharacterCard(snapshot: snapshot)
                     LiveActivityControls()
                 }
                 .padding()
             }
-            .navigationTitle("屏之岛")
             .background(Color(.systemGroupedBackground))
+            .toolbar(.hidden, for: .navigationBar)
             .onAppear {
                 // 消费监控扩展积累的待结算事件；无新数据时零开销
                 SettlementCoordinator.settlePending()
@@ -28,16 +25,45 @@ struct CharacterHomeView: View {
             }
         }
     }
+}
 
-    // MARK: 中上：职业 / 等级 / 最新日记
+/// 角色卡：职业/等级/状态、最新日记/最近结算、立绘双栏、属性雷达全部在同一张卡上
+private struct CharacterCard: View {
+    let snapshot: DisplaySnapshot
 
-    private var headerSection: some View {
-        VStack(spacing: 6) {
+    var body: some View {
+        VStack(spacing: 14) {
+            headerRow
+            diaryRow
+            heroRow
+            Divider().opacity(0.4)
+            AttributeRadarCard(attributes: snapshot.attributes ?? [:])
+        }
+        .padding(16)
+        .background(Color(.secondarySystemGroupedBackground),
+                    in: RoundedRectangle(cornerRadius: 20))
+    }
+
+    // 行1（居中）：当前状态 · 职业 · 等级
+    private var headerRow: some View {
+        HStack(spacing: 10) {
+            Spacer()
+            Text("状态：\(snapshot.fatigueText)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Text(snapshot.className)
                 .font(.title2.bold())
             Text("等级 \(snapshot.level)")
-                .font(.subheadline)
+                .font(.headline)
                 .foregroundStyle(.secondary)
+            Spacer()
+        }
+    }
+
+    // 行2（整体居中）：最新日记 + 最近结算时间
+    private var diaryRow: some View {
+        HStack(spacing: 10) {
+            Spacer()
             if let latest = snapshot.diaryDetail?.first {
                 HStack(spacing: 6) {
                     Image(systemName: "book.fill").font(.caption2)
@@ -55,13 +81,17 @@ struct CharacterHomeView: View {
                     .background(.indigo.opacity(0.12), in: Capsule())
                     .foregroundStyle(.indigo)
             }
+            if let at = snapshot.lastSettlementAt {
+                Text("最近结算 \(at, format: .dateTime.month(.defaultDigits).day().hour().minute())")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
         }
-        .frame(maxWidth: .infinity)
     }
 
-    // MARK: 正中：左装备栏 · 角色形象 · 右特质栏
-
-    private var heroSection: some View {
+    // 行3：左装备栏 · 角色立绘 · 右特质栏
+    private var heroRow: some View {
         HStack(alignment: .center, spacing: 14) {
             EquipmentColumn(details: snapshot.equippedDetail)
             Spacer(minLength: 0)
@@ -69,24 +99,6 @@ struct CharacterHomeView: View {
             Spacer(minLength: 0)
             TraitColumn(skills: snapshot.skills, todayDice: snapshot.todayDice)
         }
-        .padding(16)
-        .background(Color(.secondarySystemGroupedBackground),
-                    in: RoundedRectangle(cornerRadius: 20))
-    }
-
-    // MARK: 状态行（疲劳 / 最近结算）
-
-    private var statusSection: some View {
-        HStack {
-            Label("状态：\(snapshot.fatigueText)", systemImage: "moon.zzz.fill")
-            Spacer()
-            if let at = snapshot.lastSettlementAt {
-                Text("最近结算 \(at, format: .dateTime.month(.defaultDigits).day().hour().minute())")
-            }
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 4)
     }
 }
 
@@ -279,12 +291,9 @@ private struct AttributeRadarCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 4)
             RadarChart(values: values, labels: axisKeys, maxValue: maxValue)
-                .frame(height: 240)
+                .frame(height: 220)
                 .padding(.horizontal, 8)
         }
-        .padding(14)
-        .background(Color(.secondarySystemGroupedBackground),
-                    in: RoundedRectangle(cornerRadius: 16))
     }
 }
 

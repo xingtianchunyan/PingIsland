@@ -75,6 +75,7 @@ struct DiaryView: View {
                 .padding()
             }
             .navigationTitle("日记")
+            .toolbar(.hidden, for: .navigationBar)
             .background(Color(.systemGroupedBackground))
             .onAppear {
                 SettlementCoordinator.settlePending()
@@ -220,35 +221,144 @@ private struct DiaryEntryRow: View {
     }
 }
 
-/// 收藏页（执行文档 5.3-3）：装备藏品，探索中自动发现，无需手动领取。
-/// 展示：品阶决定字体颜色；外观类型（布/皮/铁/机甲）配图标；装备中带获得时间与原因。
+/// 收藏页（行天改版 v2）：上方四宫格 = 当前装备四部位；下方"今日获得"分区
+/// （与日记页当天同款行式，只保留当天获得的装备，过天自动清空）。探索自动获得，无需手动领取。
 struct CollectionView: View {
     @State private var snapshot: DisplaySnapshot = SnapshotIO.load() ?? DisplaySnapshot()
 
+    /// 今天获得的装备（acquiredAt 为当天；旧存档无获得时间的不计入）
+    private var todayAcquired: [DisplaySnapshot.CollectionDetail] {
+        (snapshot.collectionDetail ?? []).filter {
+            guard let at = $0.acquiredAt else { return false }
+            return Calendar.current.isDateInToday(at)
+        }
+    }
+
     var body: some View {
         NavigationStack {
-            List {
-                if let details = snapshot.collectionDetail, !details.isEmpty {
-                    Section("装备藏品（\(details.count)）") {
-                        ForEach(Array(details.enumerated()), id: \.offset) { _, entry in
-                            CollectionEntryRow(entry: entry)
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    if let equipped = snapshot.equippedDetail {
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())],
+                                  spacing: 12) {
+                            ForEach(Array(equipped.enumerated()), id: \.offset) { _, item in
+                                EquippedGridCard(item: item)
+                            }
                         }
                     }
-                } else if let collection = snapshot.collection, !collection.isEmpty {
-                    Section("装备藏品（\(collection.count)）") {
-                        ForEach(collection, id: \.self) { Text($0).font(.callout) }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("今日获得")
+                            .font(.headline)
+                            .padding(.horizontal, 4)
+                        if !todayAcquired.isEmpty {
+                            VStack(spacing: 0) {
+                                ForEach(Array(todayAcquired.enumerated()), id: \.offset) { index, entry in
+                                    CollectionEntryRow(entry: entry)
+                                    if index < todayAcquired.count - 1 {
+                                        Divider().padding(.leading, 44)
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 6)
+                            .background(Color(.secondarySystemGroupedBackground),
+                                        in: RoundedRectangle(cornerRadius: 14))
+                        } else {
+                            Text("今天还没有新装备，继续修行，探索会自动发现。")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(14)
+                                .background(Color(.secondarySystemGroupedBackground),
+                                            in: RoundedRectangle(cornerRadius: 14))
+                        }
                     }
-                } else {
-                    Text("收藏会在探索中自动发现，无需任何手动领取。")
-                        .foregroundStyle(.secondary)
+
+                    // 旧快照回退：无结构化字段时按原字符串列表展示
+                    if snapshot.collectionDetail == nil, let collection = snapshot.collection,
+                       !collection.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(Array(collection.enumerated()), id: \.offset) { _, entry in
+                                Text(entry).font(.callout)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(.secondarySystemGroupedBackground),
+                                    in: RoundedRectangle(cornerRadius: 14))
+                    }
                 }
+                .padding()
             }
-            .navigationTitle("收藏")
+            .background(Color(.systemGroupedBackground))
+            .toolbar(.hidden, for: .navigationBar)
             .onAppear {
                 SettlementCoordinator.settlePending()
                 snapshot = SnapshotIO.load() ?? DisplaySnapshot()
             }
         }
+    }
+}
+
+/// 四宫格装备卡：每部位一张（部位图标 + 词条或"未装备"）
+private struct EquippedGridCard: View {
+    let item: DisplaySnapshot.EquippedDetail
+
+    private var slotIcon: String {
+        switch item.slot {
+        case "头部": return "crown.fill"
+        case "上身": return "tshirt.fill"
+        case "下身": return "figure.walk"
+        default: return "shoe.fill" // 足部
+        }
+    }
+
+    private var rarityColor: Color {
+        guard !item.isEmpty else { return .gray }
+        switch Rarity(rawValue: item.rarity) {
+        case .green: return .green
+        case .blue: return .blue
+        case .purple: return .purple
+        case .orange: return .orange
+        case .red: return .red
+        default: return .primary
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: slotIcon)
+                .font(.title2)
+                .foregroundStyle(rarityColor)
+                .opacity(item.isEmpty ? 0.35 : 1)
+                .frame(width: 40, height: 40)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(rarityColor.opacity(item.isEmpty ? 0.05 : 0.14))
+                )
+            Text(item.slot)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            if item.isEmpty {
+                Text("未装备")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            } else {
+                Text(item.affixText)
+                    .font(.caption)
+                    .foregroundStyle(rarityColor)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                Text("评 \(item.totalValue)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(Color(.secondarySystemGroupedBackground),
+                    in: RoundedRectangle(cornerRadius: 14))
     }
 }
 
