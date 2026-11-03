@@ -160,6 +160,37 @@ public struct DisplaySnapshot: Codable, Equatable {
         self.collection = collection
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case level, className, fatigueStage, recentEvent, lastSettlementAt
+        case snapshotVersion, displayPriority, bannerText, attributes, equipment
+        case recentDiaries, collection, collectionDetail, diaryDetail, weekStats
+        case equippedDetail, skills, todayDice, dayOffset
+    }
+
+    /// 旧版本快照 JSON 缺新增键时按缺省值兼容（自定义解码会抑制成员初始化器合成，故显式保留上方 init）
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        level = try c.decodeIfPresent(Int.self, forKey: .level) ?? 1
+        className = try c.decodeIfPresent(String.self, forKey: .className) ?? "觉醒中"
+        fatigueStage = try c.decodeIfPresent(Int.self, forKey: .fatigueStage) ?? 0
+        recentEvent = try c.decodeIfPresent(String.self, forKey: .recentEvent) ?? "等待第一次结算"
+        lastSettlementAt = try c.decodeIfPresent(Date.self, forKey: .lastSettlementAt)
+        snapshotVersion = try c.decodeIfPresent(Int.self, forKey: .snapshotVersion) ?? 1
+        displayPriority = try c.decodeIfPresent(Int.self, forKey: .displayPriority)
+        bannerText = try c.decodeIfPresent(String.self, forKey: .bannerText)
+        attributes = try c.decodeIfPresent([String: Int].self, forKey: .attributes)
+        equipment = try c.decodeIfPresent([String].self, forKey: .equipment)
+        recentDiaries = try c.decodeIfPresent([String].self, forKey: .recentDiaries)
+        collection = try c.decodeIfPresent([String].self, forKey: .collection)
+        collectionDetail = try c.decodeIfPresent([CollectionDetail].self, forKey: .collectionDetail)
+        diaryDetail = try c.decodeIfPresent([DiaryDetail].self, forKey: .diaryDetail)
+        weekStats = try c.decodeIfPresent(WeekStats.self, forKey: .weekStats)
+        equippedDetail = try c.decodeIfPresent([EquippedDetail].self, forKey: .equippedDetail)
+        skills = try c.decodeIfPresent([SkillDetail].self, forKey: .skills)
+        todayDice = try c.decodeIfPresent(Int.self, forKey: .todayDice)
+        dayOffset = try c.decodeIfPresent(Int.self, forKey: .dayOffset) ?? 0
+    }
+
     public var fatigueText: String {
         switch fatigueStage {
         case 0: return "精神饱满"
