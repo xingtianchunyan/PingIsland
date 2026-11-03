@@ -17,6 +17,9 @@ struct SettingsView: View {
                         Text(rebuildMessage).font(.caption).foregroundStyle(.secondary)
                     }
                 }
+                Section("灵动岛 / 实时活动") {
+                    LiveActivityControls()
+                }
                 Section("数据与隐私") {
                     Text("账本、分组与快照仅保存在本机共享容器，核心结算不联网、不上传屏幕使用信息；只保存成长所需的最小里程碑、分组、角色结果与事件记录。")
                     Text("删除方式：卸载 App 即清除全部本地数据。首版无第三方广告与统计 SDK。")

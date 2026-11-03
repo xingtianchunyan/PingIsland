@@ -44,9 +44,11 @@ struct DebugPanelView: View {
                 }
                 Stepper("阈值分钟：\(simMinutes)", value: $simMinutes, in: 30...480, step: 30)
                 Button("注入模拟事件并结算") { injectSimulated(dayOffset: simDayOffset) }
-                Button("模拟过一天（注入明天的新事件）") {
+                Button("模拟过一天（不注入事件，仅切换日期）") {
                     simDayOffset += 1
-                    injectSimulated(dayOffset: simDayOffset)
+                    SharedStore.defaults?.set(simDayOffset, forKey: SharedStore.Keys.simDayOffset)
+                    // 仅切换日期：按新日期重骰并刷新展示，不产生任何结算
+                    resyncDisplay(note: "已过天到 \(simDate(dayOffset: simDayOffset))（未注入事件）")
                 }
                 if simDayOffset > 0 {
                     Text("模拟日期：今天 +\(simDayOffset) 天（每日新骰点）")
@@ -57,6 +59,9 @@ struct DebugPanelView: View {
                 }
             }
             Section("测试刷新") {
+                Button("刷新展示（重新同步快照/三个页面）") {
+                    resyncDisplay(note: "已重新同步展示快照")
+                }
                 Button("触发 Widget 时间线刷新") {
                     WidgetCenter.shared.reloadAllTimelines()
                     message = "已请求刷新 Widget"
@@ -76,13 +81,22 @@ struct DebugPanelView: View {
                 }
                 Button("重置模拟数据", role: .destructive) {
                     SimulatedUsageSource.reset(base: SettlementCoordinator.store().directory.deletingLastPathComponent())
-                    simResult = "模拟账本已清空"
+                    simDayOffset = 0
+                    SharedStore.defaults?.set(0, forKey: SharedStore.Keys.simDayOffset)
+                    // 用全新引擎同步展示：等级/属性/装备/特质/骰点一并归零
+                    let fresh = SettlementEngine(groups: Array(TrainingGroup.allCases),
+                                                 characterSeed: SimulatedUsageSource.seed)
+                    SettlementCoordinator.syncDisplayFromSimulated(fresh)
+                    WidgetCenter.shared.reloadAllTimelines()
+                    simResult = "模拟账本已清空，展示已重置"
+                    refresh()
                 }
             }
         }
         .navigationTitle("调试面板")
         .onAppear {
             anomalySleepOn = SharedStore.defaults?.bool(forKey: SharedStore.Keys.anomalySleep) ?? false
+            simDayOffset = SharedStore.defaults?.integer(forKey: SharedStore.Keys.simDayOffset) ?? 0
             refresh()
         }
     }
@@ -141,13 +155,43 @@ struct DebugPanelView: View {
 
     // MARK: - 模拟数据（独立账本）
 
+    /// 当前模拟账本重建出的引擎（无新结算；过天/刷新/展示同步用）
+    private func currentSimEngine() -> SettlementEngine? {
+        let base = SettlementCoordinator.store().directory.deletingLastPathComponent()
+        guard let service = try? SettlementService(store: SimulatedUsageSource.store(base: base),
+                                                 groups: Array(TrainingGroup.allCases),
+                                                 characterSeed: SimulatedUsageSource.seed)
+        else { return nil }
+        return service.engine
+    }
+
+    /// 重同步展示链路（快照 → Widget / Live Activity），不产生结算
+    private func resyncDisplay(note: String) {
+        guard let engine = currentSimEngine() else {
+            simResult = "重同步失败：模拟账本不可读"
+            return
+        }
+        SettlementCoordinator.syncDisplayFromSimulated(engine)
+        WidgetCenter.shared.reloadAllTimelines()
+        simResult = note
+        refresh()
+    }
+
     private func injectSimulated(dayOffset: Int = 0) {
         let base = SettlementCoordinator.store().directory.deletingLastPathComponent()
         do {
             let service = try SettlementService(store: SimulatedUsageSource.store(base: base),
                                                 groups: Array(TrainingGroup.allCases),
                                                 characterSeed: SimulatedUsageSource.seed)
+            // 结算时间取模拟日期的当前时刻：日记/装备获得时间与"今天"分区过滤保持一致
+            let cal = Calendar(identifier: .gregorian)
             let now = Date()
+            let simDay = cal.date(byAdding: .day, value: dayOffset, to: now) ?? now
+            let time = cal.dateComponents([.hour, .minute, .second], from: now)
+            let confirmedAt = cal.date(bySettingHour: time.hour ?? 12,
+                                       minute: time.minute ?? 0,
+                                       second: time.second ?? 0,
+                                       of: simDay) ?? simDay
             let localDate = simDate(dayOffset: dayOffset)
             let event = SimulatedUsageSource.makeEvent(
                 group: simGroup, thresholdMinutes: simMinutes,
@@ -189,7 +233,7 @@ struct DebugPanelView: View {
             level: snapshot.level, className: snapshot.className, recentEvent: snapshot.recentEvent)
         let activities = Activity<PingIslandActivityAttributes>.activities
         guard !activities.isEmpty else {
-            message = "无存活活动：请在角色页先开启实时活动"
+            message = "无存活活动：请在设置页先开启实时活动"
             return
         }
         for activity in activities {

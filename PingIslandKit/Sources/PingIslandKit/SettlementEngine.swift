@@ -96,6 +96,17 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
         appliedThreshold[localDate]?.reduce(0) { $0 + $1.value } ?? 0
     }
 
+    /// 预览某日骰点（不写入状态；当日首次结算前展示层显示用）。
+    /// 与结算路径同一骰子种子与运气快照口径，确保预览值 = 结算值。
+    public func previewDice(for localDate: String) -> Int {
+        var rng = SeededRandom(seed: diceSeed(for: localDate))
+        var segment = segments[localDate]
+            ?? GameDaySegment(segmentID: Int64(segments.count + 1),
+                              localDate: localDate, timeZoneID: "local")
+        return segment.ensureDice(luckSnapshot: finalAttributes()[.luk, default: 1],
+                                  rng: &rng).value
+    }
+
     /// 以修行组选择初始化：随机分配 10 点初始属性（种子固定，可重建）
     public init(groups: [TrainingGroup], characterSeed: UInt64 = 1) {
         var rng = SeededRandom(seed: characterSeed)

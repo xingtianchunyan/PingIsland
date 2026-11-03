@@ -9,6 +9,15 @@ struct DiaryView: View {
 
     private var calendar: Calendar { Calendar.current }
 
+    /// "今天"判定基准：真实今天 + 模拟过天偏移（调试面板"模拟过一天"）
+    private var effectiveToday: Date {
+        calendar.date(byAdding: .day, value: snapshot.dayOffset, to: Date()) ?? Date()
+    }
+
+    private func isEffectiveToday(_ date: Date) -> Bool {
+        calendar.isDate(date, inSameDayAs: effectiveToday)
+    }
+
     /// 本地日期 key（同日分组）
     private func dayKey(_ date: Date) -> String {
         let f = DateFormatter()
@@ -23,12 +32,12 @@ struct DiaryView: View {
     }
 
     private var todayEntries: [DisplaySnapshot.DiaryDetail] {
-        (snapshot.diaryDetail ?? []).filter { calendar.isDateInToday($0.recordedAt) }
+        (snapshot.diaryDetail ?? []).filter { isEffectiveToday($0.recordedAt) }
     }
 
     private var earlierGrouped: [(key: String, title: String, entries: [DisplaySnapshot.DiaryDetail])] {
         let grouped = Dictionary(grouping: (snapshot.diaryDetail ?? [])
-            .filter { !calendar.isDateInToday($0.recordedAt) },
+            .filter { !isEffectiveToday($0.recordedAt) },
             by: { dayKey($0.recordedAt) })
         return grouped
             .sorted { $0.key > $1.key }
@@ -44,7 +53,7 @@ struct DiaryView: View {
             ScrollView {
                 LazyVStack(spacing: 16) {
                     if let week = snapshot.weekStats {
-                        WeekSummaryCard(week: week)
+                        WeekSummaryCard(week: week, today: effectiveToday)
                     }
                     DiaryDaySection(title: "今天", entries: todayEntries,
                                     isToday: true)
@@ -74,6 +83,7 @@ struct DiaryView: View {
                 }
                 .padding()
             }
+            .padding(.top, 10)
             .navigationTitle("日记")
             .toolbar(.hidden, for: .navigationBar)
             .background(Color(.systemGroupedBackground))
@@ -88,6 +98,8 @@ struct DiaryView: View {
 /// 「本周」汇总卡（屏幕使用时间·每周模块风格）
 private struct WeekSummaryCard: View {
     let week: DisplaySnapshot.WeekStats
+    /// "今天"基准（含模拟过天偏移）：柱状图高亮跟随
+    let today: Date
 
     private var weekdayLabels: [String] { ["一", "二", "三", "四", "五", "六", "日"] }
     private var maxMinutes: Int { max(1, week.days.map(\.minutes).max() ?? 0) }
@@ -146,7 +158,7 @@ private struct WeekSummaryCard: View {
     }
 
     private func isToday(_ date: Date) -> Bool {
-        Calendar.current.isDateInToday(date)
+        Calendar.current.isDate(date, inSameDayAs: today)
     }
 
     private func barHeight(_ minutes: Int) -> CGFloat {
@@ -226,11 +238,15 @@ private struct DiaryEntryRow: View {
 struct CollectionView: View {
     @State private var snapshot: DisplaySnapshot = SnapshotIO.load() ?? DisplaySnapshot()
 
-    /// 今天获得的装备（acquiredAt 为当天；旧存档无获得时间的不计入）
+    /// 今天获得的装备（acquiredAt 在"有效今天"内；旧存档无获得时间的不计入）
+    private var effectiveToday: Date {
+        Calendar.current.date(byAdding: .day, value: snapshot.dayOffset, to: Date()) ?? Date()
+    }
+
     private var todayAcquired: [DisplaySnapshot.CollectionDetail] {
         (snapshot.collectionDetail ?? []).filter {
             guard let at = $0.acquiredAt else { return false }
-            return Calendar.current.isDateInToday(at)
+            return Calendar.current.isDate(at, inSameDayAs: effectiveToday)
         }
     }
 
@@ -291,6 +307,7 @@ struct CollectionView: View {
                 }
                 .padding()
             }
+            .padding(.top, 10)
             .background(Color(.systemGroupedBackground))
             .toolbar(.hidden, for: .navigationBar)
             .onAppear {
@@ -356,7 +373,8 @@ private struct EquippedGridCard: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 14)
+        .frame(height: 132)
+        .padding(.vertical, 10)
         .background(Color(.secondarySystemGroupedBackground),
                     in: RoundedRectangle(cornerRadius: 14))
     }
@@ -388,25 +406,27 @@ private struct CollectionEntryRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Image(systemName: appearanceIcon)
                 .font(.title3)
                 .foregroundStyle(rarityColor)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(entry.text).font(.callout).foregroundStyle(rarityColor)
-                    if entry.isEquipped {
-                        Label("装备中", systemImage: "checkmark.seal.fill")
-                            .font(.caption2).foregroundStyle(.cyan)
-                    }
-                }
+                Text(entry.text).font(.callout).foregroundStyle(rarityColor)
                 if let at = entry.acquiredAt {
-                    Text("获得于 \(at.formatted(date: .abbreviated, time: .shortened))"
-                         + (entry.origin.map { " · \($0)" } ?? ""))
+                    Text((entry.origin.map { "\($0) · " } ?? "")
+                         + at.formatted(date: .abbreviated, time: .shortened))
                         .font(.caption2).foregroundStyle(.secondary)
                 }
             }
+            Spacer()
+            if entry.isEquipped {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.caption)
+                    .foregroundStyle(.cyan)
+            }
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 }

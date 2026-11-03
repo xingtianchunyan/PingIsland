@@ -17,6 +17,8 @@ public enum SharedStore {
         public static let monitorRegisteredAt = "monitorRegisteredAt.v1"
         /// 恢复层确认异常休眠（执行文档 11.4 最高展示优先级）
         public static let anomalySleep = "anomalySleep.v1"
+        /// 调试"模拟过一天"偏移（今天 + N 天；持久化，展示层今天判定基准）
+        public static let simDayOffset = "simDayOffset.v1"
     }
 }
 
@@ -52,6 +54,8 @@ public struct DisplaySnapshot: Codable, Equatable {
     public var skills: [SkillDetail]?
     /// 今日骰点（角色页特质栏展示；nil = 未知）
     public var todayDice: Int?
+    /// 模拟过天偏移（调试：今天 + N 天；0 = 真实今天）。展示层"今天"的判定基准。
+    public var dayOffset: Int
 
     /// 日记条目结构化展示数据
     public struct DiaryDetail: Equatable, Codable, Sendable {
@@ -134,7 +138,7 @@ public struct DisplaySnapshot: Codable, Equatable {
                 collectionDetail: [CollectionDetail]? = nil,
                 diaryDetail: [DiaryDetail]? = nil, weekStats: WeekStats? = nil,
                 equippedDetail: [EquippedDetail]? = nil, skills: [SkillDetail]? = nil,
-                todayDice: Int? = nil) {
+                todayDice: Int? = nil, dayOffset: Int = 0) {
         self.level = level
         self.className = className
         self.fatigueStage = fatigueStage
@@ -152,6 +156,7 @@ public struct DisplaySnapshot: Codable, Equatable {
         self.equippedDetail = equippedDetail
         self.skills = skills
         self.todayDice = todayDice
+        self.dayOffset = dayOffset
         self.collection = collection
     }
 
@@ -212,12 +217,12 @@ public enum SnapshotPresentation {
         return "\(item.slot.rawValue) · \(rarityName(item.rarity)) · \(affixText)（评 \(item.totalValue)）"
     }
 
-    /// 收藏页结构化条目用：品阶已由字体颜色表达，省略「白装/绿装」文字。
+    /// 收藏页结构化条目用：品阶已由字体颜色表达，省略「白装/绿装」文字与评分。
     public static func equipmentSummaryWithoutRarity(_ item: EquipmentItem) -> String {
         let affixText = item.affixes
             .map { "\($0.attribute.rawValue) +\($0.value)" }
             .joined(separator: "、")
-        return "\(item.slot.rawValue) · \(affixText)（评 \(item.totalValue)）"
+        return "\(item.slot.rawValue) · \(affixText)"
     }
 
     public static func rarityName(_ rarity: Rarity) -> String {

@@ -10,11 +10,11 @@ struct CharacterHomeView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 14) {
+                VStack(spacing: 12) {
                     CharacterCard(snapshot: snapshot)
-                    LiveActivityControls()
                 }
-                .padding()
+                .padding(.horizontal)
+                .padding(.vertical, 8)
             }
             .background(Color(.systemGroupedBackground))
             .toolbar(.hidden, for: .navigationBar)
@@ -32,31 +32,34 @@ private struct CharacterCard: View {
     let snapshot: DisplaySnapshot
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 10) {
             headerRow
             diaryRow
             heroRow
             Divider().opacity(0.4)
             AttributeRadarCard(attributes: snapshot.attributes ?? [:])
         }
-        .padding(16)
+        .padding(12)
         .background(Color(.secondarySystemGroupedBackground),
                     in: RoundedRectangle(cornerRadius: 20))
     }
 
-    // 行1（居中）：当前状态 · 职业 · 等级
+    // 行1：职业+等级绝对居中；疲劳状态置左（不占居中宽度），无"状态："字样
     private var headerRow: some View {
-        HStack(spacing: 10) {
-            Spacer()
-            Text("状态：\(snapshot.fatigueText)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(snapshot.className)
-                .font(.title2.bold())
-            Text("等级 \(snapshot.level)")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-            Spacer()
+        ZStack {
+            HStack {
+                Text(snapshot.fatigueText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            HStack(spacing: 10) {
+                Text(snapshot.className)
+                    .font(.title2.bold())
+                Text("等级 \(snapshot.level)")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -122,10 +125,10 @@ private struct CharacterAvatar: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             Text(classEmoji)
-                .font(.system(size: 72))
-                .frame(width: 120, height: 120)
+                .font(.system(size: 54))
+                .frame(width: 92, height: 92)
                 .background(
                     Circle().fill(.indigo.opacity(0.12))
                 )
@@ -291,7 +294,7 @@ private struct AttributeRadarCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 4)
             RadarChart(values: values, labels: axisKeys, maxValue: maxValue)
-                .frame(height: 220)
+                .frame(height: 190)
                 .padding(.horizontal, 8)
         }
     }

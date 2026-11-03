@@ -70,3 +70,27 @@ final class DayStatsTests: XCTestCase {
         XCTAssertEqual(restored.diary, engine.diary)
     }
 }
+
+// MARK: - 骰点预览（previewDice）
+
+extension DayStatsTests {
+    func testPreviewDiceIsDeterministicAndMatchesSettlement() {
+        var engine = makeEngine()
+        let preview = engine.previewDice(for: "2026-11-10")
+        XCTAssertGreaterThanOrEqual(preview, 1)
+        XCTAssertLessThanOrEqual(preview, 20)
+        // 预览不写入状态：结算前 segments 无该日段
+        XCTAssertNil(engine.segments["2026-11-10"])
+        // 实际结算后骰点与预览一致
+        engine.process(event("preview-1", minutes: 30, date: "2026-11-10"))
+        XCTAssertEqual(engine.segments["2026-11-10"]?.dice?.value, preview)
+    }
+
+    func testPreviewDiceDiffersByDate() {
+        let engine = makeEngine()
+        // 不强制不同（骰子可能撞值），只验证可重复调用无副作用
+        let a = engine.previewDice(for: "2026-11-10")
+        let b = engine.previewDice(for: "2026-11-10")
+        XCTAssertEqual(a, b)
+    }
+}

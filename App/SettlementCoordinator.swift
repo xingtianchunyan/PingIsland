@@ -54,7 +54,10 @@ public enum SettlementCoordinator {
 
     private static func refreshSnapshot(from engine: SettlementEngine,
                                         latestDelta: SettlementDelta?) {
-        let today = dateString(Date())
+        // 调试"模拟过一天"偏移：今天 + N 天；展示层"今天"的判定基准随之一致
+        let dayOffset = SharedStore.defaults?.integer(forKey: SharedStore.Keys.simDayOffset) ?? 0
+        let effectiveToday = Calendar.current.date(byAdding: .day, value: dayOffset, to: Date()) ?? Date()
+        let today = dateString(effectiveToday)
         let priorityInput = PresentationInput(
             latestDelta: latestDelta,
             hasAnomalySleep: SharedStore.defaults?.bool(forKey: SharedStore.Keys.anomalySleep) ?? false,
@@ -107,25 +110,26 @@ public enum SettlementCoordinator {
                     entryType: entry.entryType.rawValue,
                     group: entry.group.rawValue)
             },
-            weekStats: makeWeekStats(from: engine),
+            weekStats: makeWeekStats(from: engine, around: effectiveToday),
             equippedDetail: equippedDetail(from: engine),
             skills: engine.skillCollection.items
                 .sorted { ($0.rarity != $1.rarity) ? $0.rarity > $1.rarity : $0.level > $1.level }
                 .prefix(6)
                 .map { DisplaySnapshot.SkillDetail(weekday: $0.weekday, isActive: $0.isActive,
                                                    rarity: $0.rarity.rawValue, level: $0.level) },
-            todayDice: engine.segments[today]?.dice?.value
+            todayDice: engine.segments[today]?.dice?.value ?? engine.previewDice(for: today),
+            dayOffset: dayOffset
         )
         SnapshotIO.save(snapshot)
     }
 
-    /// 本周一（本地日历，周一为一周之首）起 7 天聚合
-    private static func makeWeekStats(from engine: SettlementEngine) -> DisplaySnapshot.WeekStats {
+    /// 本周一（本地日历，周一为一周之首）起 7 天聚合；anchor 为"今天"基准（含模拟偏移）
+    private static func makeWeekStats(from engine: SettlementEngine,
+                                      around anchor: Date) -> DisplaySnapshot.WeekStats {
         var calendar = Calendar.current
         calendar.firstWeekday = 2 // 周一
-        let now = Date()
         let weekStart = calendar.date(
-            from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
+            from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: anchor)) ?? anchor
         var days: [DisplaySnapshot.WeekStats.DayBar] = []
         var totalMinutes = 0
         var totalMilli: Int64 = 0

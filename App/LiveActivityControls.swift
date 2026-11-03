@@ -47,10 +47,12 @@ struct LiveActivityControls: View {
 
     private func endAll() {
         Task {
+            // .immediate：立即从灵动岛/锁屏移除；.default 会保留到系统超时（锁屏残留的根因）
             for activity in Activity<PingIslandActivityAttributes>.activities {
-                await activity.end(dismissalPolicy: .default)
+                await activity.end(dismissalPolicy: .immediate)
             }
+            let remaining = Activity<PingIslandActivityAttributes>.activities.count
+            message = remaining == 0 ? "已结束" : "仍有 \(remaining) 个活动未能结束"
         }
-        message = "已结束"
     }
 }
