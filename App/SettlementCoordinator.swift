@@ -98,7 +98,7 @@ public enum SettlementCoordinator {
                         origin: item.origin,
                         appearance: EquipmentAppearance.appearanceType(
                             finalWisdom: engine.finalAttributes()[.wis, default: 0]))
-                }),
+                },
             diaryDetail: engine.diary.reversed().map { entry in
                 DisplaySnapshot.DiaryDetail(
                     recordedAt: entry.recordedAt,
