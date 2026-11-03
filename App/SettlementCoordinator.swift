@@ -91,7 +91,7 @@ public enum SettlementCoordinator {
                 .sorted { ($0.rarity != $1.rarity) ? $0.rarity > $1.rarity : $0.id < $1.id }
                 .map { item in
                     DisplaySnapshot.CollectionDetail(
-                        text: SnapshotPresentation.equipmentSummary(item),
+                        text: SnapshotPresentation.equipmentSummaryWithoutRarity(item),
                         rarity: item.rarity.rawValue,
                         isEquipped: item.isEquipped,
                         acquiredAt: item.acquiredAt,

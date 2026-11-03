@@ -137,6 +137,14 @@ public enum SnapshotPresentation {
         return "\(item.slot.rawValue) · \(rarityName(item.rarity)) · \(affixText)（评 \(item.totalValue)）"
     }
 
+    /// 收藏页结构化条目用：品阶已由字体颜色表达，省略「白装/绿装」文字。
+    public static func equipmentSummaryWithoutRarity(_ item: EquipmentItem) -> String {
+        let affixText = item.affixes
+            .map { "\($0.attribute.rawValue) +\($0.value)" }
+            .joined(separator: "、")
+        return "\(item.slot.rawValue) · \(affixText)（评 \(item.totalValue)）"
+    }
+
     public static func rarityName(_ rarity: Rarity) -> String {
         switch rarity {
         case .white: return "白装"

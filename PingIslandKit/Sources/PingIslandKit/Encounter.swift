@@ -88,7 +88,7 @@ public enum DiaryText {
             }
         }
         if key == "oracle.boon" {
-            return "☀️ 骰点 20 大成功·神谕降临"
+            return "☀️ 神谕降临"
         }
         if key.hasPrefix("dailylife.") {
             let index = Int(key.dropFirst("dailylife.".count)) ?? -1

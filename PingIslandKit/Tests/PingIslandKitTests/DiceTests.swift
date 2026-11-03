@@ -78,7 +78,7 @@ final class OracleDiaryTests: XCTestCase {
         XCTAssertEqual(oracleEntries.count, 1)
         XCTAssertEqual(oracleEntries.first?.textKey, "oracle.boon")
         XCTAssertTrue(oracleEntries.first?.rewardSummary.contains("神谕奖励") ?? false)
-        XCTAssertTrue(DiaryText.display("oracle.boon").contains("大成功"))
+        XCTAssertTrue(DiaryText.display("oracle.boon").contains("神谕降临"))
     }
 
     func testOracleOncePerDayOnly() {
