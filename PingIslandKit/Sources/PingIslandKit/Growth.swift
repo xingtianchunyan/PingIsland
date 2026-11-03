@@ -56,3 +56,16 @@ public struct GrowthAccumulator: Equatable, Codable, Sendable {
     /// 小数余量（千分之一），如 0.5 → 500，跨段保留
     public var remainderMilli: Int64 { totalMilli % 1000 }
 }
+
+/// 按日聚合的成长数据（日记页"屏幕使用时间"周视图的数据源）。
+/// localDate（yyyy-MM-dd）→ 当日入账；分钟与成长值同日多事件累加。
+public struct DayStats: Equatable, Codable, Sendable {
+    /// 当日已入账的有效分钟
+    public var minutes: Int = 0
+    /// 当日入账成长值（千分之一 XP；1000 = 1 XP）
+    public var growthMilli: Int64 = 0
+    /// 当日升级次数（规则 v1.1：100 XP 升 1 级）
+    public var levelGained: Int = 0
+
+    public init() {}
+}

@@ -98,8 +98,71 @@ public enum SettlementCoordinator {
                         origin: item.origin,
                         appearance: EquipmentAppearance.appearanceType(
                             finalWisdom: engine.finalAttributes()[.wis, default: 0]))
-                })
+                }),
+            diaryDetail: engine.diary.reversed().map { entry in
+                DisplaySnapshot.DiaryDetail(
+                    recordedAt: entry.recordedAt,
+                    text: DiaryText.display(entry.textKey),
+                    rewardSummary: entry.rewardSummary,
+                    entryType: entry.entryType.rawValue,
+                    group: entry.group.rawValue)
+            },
+            weekStats: makeWeekStats(from: engine),
+            equippedDetail: equippedDetail(from: engine),
+            skills: engine.skillCollection.items
+                .sorted { ($0.rarity != $1.rarity) ? $0.rarity > $1.rarity : $0.level > $1.level }
+                .prefix(6)
+                .map { DisplaySnapshot.SkillDetail(weekday: $0.weekday, isActive: $0.isActive,
+                                                   rarity: $0.rarity.rawValue, level: $0.level) },
+            todayDice: engine.segments[today]?.dice?.value
+        )
         SnapshotIO.save(snapshot)
+    }
+
+    /// 本周一（本地日历，周一为一周之首）起 7 天聚合
+    private static func makeWeekStats(from engine: SettlementEngine) -> DisplaySnapshot.WeekStats {
+        var calendar = Calendar.current
+        calendar.firstWeekday = 2 // 周一
+        let now = Date()
+        let weekStart = calendar.date(
+            from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
+        var days: [DisplaySnapshot.WeekStats.DayBar] = []
+        var totalMinutes = 0
+        var totalMilli: Int64 = 0
+        for i in 0..<7 {
+            guard let date = calendar.date(byAdding: .day, value: i, to: weekStart) else { continue }
+            let stats = engine.dayStats[dateString(date)]
+            let minutes = stats?.minutes ?? 0
+            let milli = stats?.growthMilli ?? 0
+            days.append(DisplaySnapshot.WeekStats.DayBar(date: date, minutes: minutes,
+                                                         growthMilli: milli))
+            totalMinutes += minutes
+            totalMilli += milli
+        }
+        let diaryCount = engine.diary.filter { $0.recordedAt >= weekStart }.count
+        let levelGained = days.reduce(0) { $0 + (engine.dayStats[dateString($1.date)]?.levelGained ?? 0) }
+        return DisplaySnapshot.WeekStats(weekStart: weekStart, totalMinutes: totalMinutes,
+                                         totalGrowthMilli: totalMilli, levelGained: levelGained,
+                                         diaryCount: diaryCount, days: days)
+    }
+
+    /// 角色页装备栏：四部位（头部/上身/下身/足部），未装备部位 isEmpty
+    private static func equippedDetail(from engine: SettlementEngine) -> [DisplaySnapshot.EquippedDetail] {
+        let wisdom = engine.finalAttributes()[.wis, default: 0]
+        return EquipmentSlot.allCases.map { slot in
+            guard let item = engine.equipped[slot] else {
+                return DisplaySnapshot.EquippedDetail(slot: slot.rawValue, isEmpty: true,
+                                                      rarity: 0, appearance: "",
+                                                      affixText: "", totalValue: 0)
+            }
+            let affixText = item.affixes
+                .map { "\($0.attribute.rawValue) +\($0.value)" }
+                .joined(separator: "、")
+            return DisplaySnapshot.EquippedDetail(
+                slot: slot.rawValue, isEmpty: false, rarity: item.rarity.rawValue,
+                appearance: EquipmentAppearance.appearanceType(finalWisdom: wisdom),
+                affixText: affixText, totalValue: item.totalValue)
+        }
     }
 
     private static func shortTimestamp(_ date: Date) -> String {

@@ -60,11 +60,13 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
     private var observationDays: Set<String> = []
     /// 技能收藏（9.6：由有效分钟抽选累积；升级满级后转化点数）
     public private(set) var skillCollection = SkillCollection()
+    /// 按日聚合的成长数据（日记页"屏幕使用时间"周视图用；旧存档缺省为空表）
+    public private(set) var dayStats: [String: DayStats] = [:]
 
     private enum CodingKeys: String, CodingKey {
         case growth, baseAttributes, equipment, equipped, diary, processedEventIDs
         case segments, classState, characterSeed, appliedThreshold
-        case observationMinutes, observationDays, skillCollection
+        case observationMinutes, observationDays, skillCollection, dayStats
     }
 
     /// 旧版本 state JSON 没有 skillCollection 键：解码时按空收藏兼容，其余字段照原要求
@@ -84,6 +86,7 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
         observationDays = try c.decode(Set<String>.self, forKey: .observationDays)
         skillCollection = try c.decodeIfPresent(SkillCollection.self, forKey: .skillCollection)
             ?? SkillCollection()
+        dayStats = try c.decodeIfPresent([String: DayStats].self, forKey: .dayStats) ?? [:]
     }
 
     public var level: Int64 { growth.level }
@@ -157,6 +160,12 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
             let newLevel = growth.level
             let oldLevel = 1 + (growth.totalMilli - appliedMilli) / 100_000
             baseAttributes[.wis, default: 0] += Int(newLevel - oldLevel)
+            // 按日聚合（周视图）：同日多事件累加，等级增量按本段前后差计
+            var ds = dayStats[event.localDate] ?? DayStats()
+            ds.minutes += newMinutes
+            ds.growthMilli += appliedMilli
+            ds.levelGained += Int(newLevel - oldLevel)
+            dayStats[event.localDate] = ds
         }
 
         // 5.5 技能抽选：每个有效分钟一次逻辑抽选（9.6），按（种子、骰点、分钟序号、星期）确定性
