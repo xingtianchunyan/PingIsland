@@ -17,7 +17,8 @@ jobs:
     name: 规则引擎 swift test
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      # v5 运行于 Node.js 24，消除 "Node.js 20 is deprecated" 警告
+      - uses: actions/checkout@v5
       - name: 显示工具链版本
         run: |
           sw_vers
