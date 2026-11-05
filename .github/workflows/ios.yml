@@ -6,7 +6,7 @@ name: ios
 
 on:
   push:
-    branches: [main, "chore/**", "feat/**", "spike/**", "test/**"]
+    branches: [main, "chore/**", "feat/**", "fix/**", "spike/**", "test/**"]
   pull_request:
   workflow_dispatch:
 
@@ -16,7 +16,7 @@ jobs:
     # 公开库 macOS 免费不限量；不折腾 Ubuntu setup-swift 版本清单
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: 显示工具链版本
         run: |
           sw_vers
@@ -30,7 +30,7 @@ jobs:
     name: 模拟器集成/UI 测试
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: 安装 XcodeGen
         run: brew install xcodegen
       - name: 生成 Xcode 工程
@@ -58,7 +58,7 @@ jobs:
     runs-on: macos-26
     needs: [rules-test, simulator-test]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: 安装 XcodeGen
         run: brew install xcodegen
       - name: 生成 Xcode 工程

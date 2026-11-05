@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2026-11-06 真机反馈批次五（第十五批）：灵动岛无法开启（闪烁/秒死/无授权卡）
+- 现象：设置页点"开启灵动岛/锁屏实时活动"后页面快速闪烁，活动净存活为零；灵动岛无反应；锁屏不出现实时活动与"始终允许"授权卡
+- 根因一：`LiveActivityControls.start()` 无防重入——连续点击产生并发 Task，后一个 Task 的"结束全部"把前一个刚创建的活动杀掉（第六批修复的同 Task 顺序只保证单次，不防并发）
+- 修复一：新增 `busy` 状态，结束/创建序列执行期间禁用开启/结束按钮，重复点击直接忽略
+- 根因二：`com.apple.developer.live-activities` entitlement 全工程缺失（此前只在 Info.plist 声明 NSSupportsLiveActivities），重新签名/重装后行为随机退化
+- 修复二：project.yml 与 App/Widgets 两个 entitlements 文件补齐声明（Live Activity 视图渲染在 Widget 扩展里，两个 target 都需要）
+- 修复三：新增 `Shared/LiveActivityDiagnostics.swift`，每次开启/结束的结果与确切错误写入共享容器，调试面板"运行状态"显示最近 3 条——真机失败不再靠口头转述
+- CI：push 触发分支补 `fix/**`；actions/checkout 升 v5（消除 Node 20 弃用警告）
+- 分支：`fix/live-activity-restart`（自 feat/ui-redesign）；待 Actions 出 IPA 后第十六次真机验证
+
 ## [未发布] - 2026-11-02
 
 ### 环境配置（任务书阶段 0~5，已完成）
