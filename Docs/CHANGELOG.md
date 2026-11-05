@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2026-11-06 美术资源分支（feat/assets-v2）
+- 合入《PingIsland-Assets V2》：标准 .xcassets 结构 56 个 imageset / 93 张 PNG（约 22 MB）
+- 覆盖：8 职业立绘（768×1152）、16 装备图（4 部位 × 布/皮/铁/机甲外观，768×768）、
+  5 疲劳阶段、3 遭遇怪（史莱姆/骷髅/哥布林）、12 技能图标（6 元素 × 主动/被动）、
+  夜间睡姿、新版 AppIcon（1024×1024 水彩岛屿）
+- 命名与代码枚举对齐：class_* / eq_部位_外观 / fatigue_* / skill_元素_active|passive / monster_*
+  —— SwiftUI 侧可按名直接 `Image("...")` 引用
+- 风格统一为水彩 Q 版（与 holo 卡牌卡框裁切方式匹配）；单 scale 无 @2x/@3x，RGB 无透明通道（卡面图带背景）
+- 分支：`feat/assets-v2`（自 feat/ui-redesign `06ac420`）；UI 引用接入随 holo 分支后续进行
+
 ## [未发布] - 2026-11-02
 
 ### 环境配置（任务书阶段 0~5，已完成）
