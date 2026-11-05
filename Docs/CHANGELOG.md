@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2026-11-06 UI 特效分支（feat/holo-card，角色页/收藏页 3D 卡牌）
+- 新增 `Shared/HoloCardKit.swift`（纯 SwiftUI，零第三方依赖）：2.5D 倾斜交互（±9°，松手弹簧回正）、
+  万智牌式卡框（标题栏/画框/类型行/文本框）、闪卡覆层（银边/金边/全彩彩虹，TimelineView 30fps）、
+  金雨粒子（运气 ≥900 触发，Canvas 无状态）
+- 角色页：角色卡升级为可翻转万智牌式卡牌（闪卡档位按等级：<100 普通 / 100~199 银边 / 200~399 金边 / ≥400 全彩）
+- 收藏页：装备四宫格点按放大为可翻转闪卡（白/绿/蓝普通；紫银边；橙金边；红全彩），空槽不可放大
+- 设计来源：参考 holo-card-studio（EverettFish，MIT 协议，github.com/EverettFish/holo-card-studio）的交互，
+  全部重写为 SwiftUI 实现，无代码拷贝；待 CI 编译验证与真机体验确认
+- 分支：`feat/holo-card`（自 feat/ui-redesign `06ac420`）
+
 ## [未发布] - 2026-11-02
 
 ### 环境配置（任务书阶段 0~5，已完成）

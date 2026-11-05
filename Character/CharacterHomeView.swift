@@ -1,9 +1,9 @@
 import PingIslandKit
 import SwiftUI
 
-/// 角色主页（执行文档 5.3-1，行天改版 v2：全部元素集中于一张角色卡）：
-/// 行1 = 状态 · 职业 · 等级（居中一行）；行2 = 最新日记 + 最近结算（整体居中）；
-/// 行3 = 左装备栏 · 角色立绘 · 右特质栏；行4 = 六边形属性雷达。只读展示快照。
+/// 角色主页（执行文档 5.3-1，holo 升级）：
+/// 顶部 = 可小角度翻转的 2.5D 万智牌式角色卡（闪卡按等级；运气 ≥ 900 卡面下金雨），
+/// 其下 = 装备栏 · 特质栏双列，底部 = 六边形属性雷达。只读展示快照。
 struct CharacterHomeView: View {
     @State private var snapshot: DisplaySnapshot = SnapshotIO.load() ?? DisplaySnapshot()
 
@@ -11,7 +11,10 @@ struct CharacterHomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 12) {
-                    CharacterCard(snapshot: snapshot)
+                    CharacterHoloCard(snapshot: snapshot)
+                    heroRow
+                    Divider().opacity(0.4)
+                    AttributeRadarCard(attributes: snapshot.attributes ?? [:])
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 8)
@@ -25,93 +28,31 @@ struct CharacterHomeView: View {
             }
         }
     }
-}
 
-/// 角色卡：职业/等级/状态、最新日记/最近结算、立绘双栏、属性雷达全部在同一张卡上
-private struct CharacterCard: View {
-    let snapshot: DisplaySnapshot
-
-    var body: some View {
-        VStack(spacing: 10) {
-            headerRow
-            diaryRow
-            heroRow
-            Divider().opacity(0.4)
-            AttributeRadarCard(attributes: snapshot.attributes ?? [:])
-        }
-        .padding(12)
-        .background(Color(.secondarySystemGroupedBackground),
-                    in: RoundedRectangle(cornerRadius: 20))
-    }
-
-    // 行1：职业+等级绝对居中；疲劳状态置左（不占居中宽度），无"状态："字样
-    private var headerRow: some View {
-        ZStack {
-            HStack {
-                Text(snapshot.fatigueText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            HStack(spacing: 10) {
-                Text(snapshot.className)
-                    .font(.title2.bold())
-                Text("等级 \(snapshot.level)")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    // 行2（整体居中）：最新日记 + 最近结算时间
-    private var diaryRow: some View {
-        HStack(spacing: 10) {
-            Spacer()
-            if let latest = snapshot.diaryDetail?.first {
-                HStack(spacing: 6) {
-                    Image(systemName: "book.fill").font(.caption2)
-                    Text(latest.text).lineLimit(1)
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 12).padding(.vertical, 5)
-                .background(.indigo.opacity(0.1), in: Capsule())
-            }
-            if let banner = snapshot.bannerText {
-                Text(banner)
-                    .font(.caption)
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(.indigo.opacity(0.12), in: Capsule())
-                    .foregroundStyle(.indigo)
-            }
-            if let at = snapshot.lastSettlementAt {
-                Text("最近结算 \(at, format: .dateTime.month(.defaultDigits).day().hour().minute())")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-        }
-    }
-
-    // 行3：左装备栏 · 角色立绘 · 右特质栏
+    // 装备栏 · 特质栏（原 heroRow 左右两栏保留）
     private var heroRow: some View {
         HStack(alignment: .center, spacing: 14) {
             EquipmentColumn(details: snapshot.equippedDetail)
             Spacer(minLength: 0)
-            CharacterAvatar(className: snapshot.className, level: snapshot.level)
-            Spacer(minLength: 0)
             TraitColumn(skills: snapshot.skills, todayDice: snapshot.todayDice)
         }
+        .padding(.vertical, 4)
     }
 }
 
-/// 职业形象（未觉醒为岛，觉醒后为职业符号）
-private struct CharacterAvatar: View {
-    let className: String
-    let level: Int
+/// 2.5D 万智牌式角色卡（holo-card-studio 风格）：
+/// - 等级 <100 普通卡面；100~199 银边闪；200~399 金边闪；≥400 全彩闪
+/// - 运气 ≥ 900 时画框背景中持续下金色雨滴
+/// - 拖动卡面小角度翻转，松手回正
+private struct CharacterHoloCard: View {
+    let snapshot: DisplaySnapshot
+
+    private var foil: HoloFoil { HoloFoil.character(level: snapshot.level) }
+
+    private var luck: Int { snapshot.attributes?["LUK"] ?? 0 }
 
     private var classEmoji: String {
-        switch className {
+        switch snapshot.className {
         case "吟游诗人": return "🎵"
         case "大法师": return "🔮"
         case "角斗士": return "🛡️"
@@ -124,19 +65,83 @@ private struct CharacterAvatar: View {
         }
     }
 
-    var body: some View {
-        VStack(spacing: 6) {
-            Text(classEmoji)
-                .font(.system(size: 54))
-                .frame(width: 92, height: 92)
-                .background(
-                    Circle().fill(.indigo.opacity(0.12))
-                )
-                .overlay(Circle().stroke(.indigo.opacity(0.3), lineWidth: 2))
-            Text("Lv.\(level)")
-                .font(.headline.monospacedDigit())
-                .foregroundStyle(.indigo)
+    /// 徽章底色随闪卡档位升级
+    private var badgeColor: Color {
+        switch foil {
+        case .plain: return .indigo
+        case .silverEdge: return Color(white: 0.45)
+        case .goldEdge: return Color(red: 0.8, green: 0.62, blue: 0.15)
+        case .rainbow: return .purple
         }
+    }
+
+    /// 画框主视觉渐变
+    private var artGradient: [Color] {
+        switch foil {
+        case .plain: return [.indigo.opacity(0.5), .teal.opacity(0.2)]
+        case .silverEdge: return [Color(white: 0.6).opacity(0.5), Color(white: 0.8).opacity(0.15)]
+        case .goldEdge: return [Color(red: 0.85, green: 0.65, blue: 0.2).opacity(0.5), .orange.opacity(0.15)]
+        case .rainbow: return [.purple.opacity(0.5), .pink.opacity(0.2), .teal.opacity(0.25)]
+        }
+    }
+
+    /// 文本框：最新日记 + 横幅 + 最近结算
+    private var cardText: String {
+        var lines: [String] = []
+        if let latest = snapshot.diaryDetail?.first {
+            lines.append("「\(latest.text)」")
+        }
+        if let banner = snapshot.bannerText {
+            lines.append(banner)
+        }
+        if let at = snapshot.lastSettlementAt {
+            lines.append("最近结算 \(at.formatted(.dateTime.month().day().hour().minute()))")
+        }
+        return lines.isEmpty ? "等待第一次结算——岛上的生活尚未开始。" : lines.joined(separator: "\n")
+    }
+
+    var body: some View {
+        HoloTilt {
+            MTGCardView(
+                name: snapshot.className,
+                costBadge: "\(snapshot.level)",
+                typeLine: "生物 · 修行者 · \(snapshot.fatigueText)",
+                textBox: cardText,
+                foil: foil,
+                goldRain: luck >= 900,
+                rarityColor: badgeColor
+            ) {
+                ZStack {
+                    LinearGradient(colors: artGradient,
+                                   startPoint: .top, endPoint: .bottom)
+                    // 稀有装饰：高级闪卡画框加入光斑
+                    if foil == .rainbow {
+                        LinearGradient(colors: [.white.opacity(0.35), .clear, .yellow.opacity(0.25)],
+                                       startPoint: .topLeading, endPoint: .center)
+                    }
+                    Text(classEmoji)
+                        .font(.system(size: 84))
+                        .shadow(color: .black.opacity(0.35), radius: 5, y: 3)
+                    VStack {
+                        HStack {
+                            if luck >= 900 {
+                                Text("LUK \(luck)")
+                                    .font(.caption2.bold().monospacedDigit())
+                                    .foregroundStyle(Color(red: 0.75, green: 0.55, blue: 0.1))
+                                    .padding(.horizontal, 8).padding(.vertical, 3)
+                                    .background(Capsule().fill(.white.opacity(0.75)))
+                            }
+                            Spacer()
+                        }
+                        .padding(8)
+                        Spacer()
+                    }
+                }
+            }
+        }
+        .frame(width: 300)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("角色卡：\(snapshot.className)，等级\(snapshot.level)，\(snapshot.fatigueText)。拖动可翻转卡牌。")
     }
 }
 
