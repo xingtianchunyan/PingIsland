@@ -1,14 +1,14 @@
 # CHANGELOG
 
-## 2026-11-06 UI 特效分支（feat/holo-card，角色页/收藏页 3D 卡牌）
-- 新增 `Shared/HoloCardKit.swift`（纯 SwiftUI，零第三方依赖）：2.5D 倾斜交互（±9°，松手弹簧回正）、
-  万智牌式卡框（标题栏/画框/类型行/文本框）、闪卡覆层（银边/金边/全彩彩虹，TimelineView 30fps）、
-  金雨粒子（运气 ≥900 触发，Canvas 无状态）
-- 角色页：角色卡升级为可翻转万智牌式卡牌（闪卡档位按等级：<100 普通 / 100~199 银边 / 200~399 金边 / ≥400 全彩）
-- 收藏页：装备四宫格点按放大为可翻转闪卡（白/绿/蓝普通；紫银边；橙金边；红全彩），空槽不可放大
-- 设计来源：参考 holo-card-studio（EverettFish，MIT 协议，github.com/EverettFish/holo-card-studio）的交互，
-  全部重写为 SwiftUI 实现，无代码拷贝；待 CI 编译验证与真机体验确认
-- 分支：`feat/holo-card`（自 feat/ui-redesign `06ac420`）
+## 2026-11-06 怪物扩展（feat/content-skills 批次二，monsters-v2）
+- 怪物图鉴键 3 → 12（六元素 × 2）：新增 树苗精/蘑菇怪/火蜥蜴/火花蝠/岩壳蟹/锈铁傀儡/小水灵/静电球/雷雀，
+  保留 小骷髅(土)/哥布林(金)/史莱姆(水)；`ContentLibrary.json` 的 `monsterArtKeys` 与
+  `ContentLibraryTests` 断言同步扩到 12 键（元素归属仅文档层标注，规则层 Monster 枚举扩 case 属 Phase A）
+- 新增 18 个 imageset（9 主图 768×768 RGBA + 9 `_widget` 240×240），沿用 v2 八段式契约同族风格
+- 遭遇抽取逻辑不变：旧 3 怪的 textKey/图鉴 rawValue 继续可解析，等概率与胜负 50/50 不受影响
+- 本地验证：JSON/测试期望/图片集三方交叉校验一致（本机 Device Guard 新策略拦截 XCTest 运行器，
+  完整 XCTest 以 CI macOS 运行器为准）
+
 ## 2026-11-06 真机反馈批次七（第十七批）：控制按钮可用性
 - 说明：「开启灵动岛/锁屏实时活动」本身是**一个按钮**——灵动岛与锁屏卡片是同一个 Live Activity 的两个展示位置，开启后同时出现
 - 按钮改名「开启实时活动」，去掉易误解的斜杠文案
@@ -30,6 +30,44 @@
 - 修复三：新增 `Shared/LiveActivityDiagnostics.swift`，每次开启/结束的结果与确切错误写入共享容器，调试面板"运行状态"显示最近 3 条——真机失败不再靠口头转述
 - CI：push 触发分支补 `fix/**`；actions/checkout 升 v5（消除 Node 20 弃用警告）
 - 分支：`fix/live-activity-restart`（自 feat/ui-redesign）；待 Actions 出 IPA 后第十六次真机验证
+## 2026-11-06 UI 特效分支（feat/holo-card，角色页/收藏页 3D 卡牌）
+- 新增 `Shared/HoloCardKit.swift`（纯 SwiftUI，零第三方依赖）：2.5D 倾斜交互（±9°，松手弹簧回正）、
+  万智牌式卡框（标题栏/画框/类型行/文本框）、闪卡覆层（银边/金边/全彩彩虹，TimelineView 30fps）、
+  金雨粒子（运气 ≥900 触发，Canvas 无状态）
+- 角色页：角色卡升级为可翻转万智牌式卡牌（闪卡档位按等级：<100 普通 / 100~199 银边 / 200~399 金边 / ≥400 全彩）
+- 收藏页：装备四宫格点按放大为可翻转闪卡（白/绿/蓝普通；紫银边；橙金边；红全彩），空槽不可放大
+- 设计来源：参考 holo-card-studio（EverettFish，MIT 协议，github.com/EverettFish/holo-card-studio）的交互，
+  全部重写为 SwiftUI 实现，无代码拷贝；待 CI 编译验证与真机体验确认
+- 分支：`feat/holo-card`（自 feat/ui-redesign `06ac420`）
+## 2026-11-06 内容库分支（feat/content-skills，自 feat/assets-v2）
+- 新增 PingIslandKit 内容库（`ContentLibrary.swift` + `Resources/ContentLibrary.json`，Bundle 资源随包分发）：
+  72 项内容 = 12 技能模板（6 元素 × 主动/被动，与 SkillRules.template(forWeekday:) 单一来源强一致）× 6 稀有度变体，
+  含名称/描述/图标键/主动姿态键；装备 16 图标键、职业 8 立绘键、疲劳 5 阶段键、怪物/夜眠/AppIcon 键
+- 遵守"数值单一实现来源"：被动数值仍由 SkillRules 推导，本库只做内容与展示定义；
+  `isValid` 校验与测试共享同一实现，规则改名即测试失败
+- 新增 ContentLibraryTests 10 例（资源加载/模板数/命名一致/72 变体全覆盖/被动属性一致/图标键完整等）
+- 美术资产重制（生成规范见 Docs/资产v2-生成规范.md）：八轴契约 + master 基准图保证全套风格一致，
+  同名覆盖上一批；新增 45 张 `_widget` 后缀组件尺寸变体（职业/装备，供 Widget/灵动岛用）
+- 接入指南：Docs/美术资产与技能库接入指南.md
+- 交付包两处修正（本地 Windows XCTest 实测发现并修复）：
+  ① SwiftPM 资源处理在本机 Windows 工具链不可用（WindowsError 4551，最小复现亦失败）——
+  JSON 改放 `Sources/PingIslandKit/Content/`（目录名 Resources 会被 SwiftPM 隐式当资源处理），
+  Package.swift 保持原样；`ContentLibrary.load()` 改为 Bundle.main → 源码树路径两级回退，
+  project.yml 把 JSON 以 resources 构建阶段打进 App 主 bundle
+  ② JSON 缺周日（7）模板：周日与周六同为雷，查找时归一化到 6（与 SkillRules 映射一致），
+  修复前 16 个测试失败（周日 12 变体查不到）
+- 本地验证：Windows XCTest **118/118 通过**（原 108 + 内容库 10）
+- 分支：`feat/content-skills`；UI 侧引用（Image(图标键) 替换 SF Symbol 占位）随后续合并进行
+
+## 2026-11-06 美术资源分支（feat/assets-v2）
+- 合入《PingIsland-Assets V2》：标准 .xcassets 结构 56 个 imageset / 93 张 PNG（约 22 MB）
+- 覆盖：8 职业立绘（768×1152）、16 装备图（4 部位 × 布/皮/铁/机甲外观，768×768）、
+  5 疲劳阶段、3 遭遇怪（史莱姆/骷髅/哥布林）、12 技能图标（6 元素 × 主动/被动）、
+  夜间睡姿、新版 AppIcon（1024×1024 水彩岛屿）
+- 命名与代码枚举对齐：class_* / eq_部位_外观 / fatigue_* / skill_元素_active|passive / monster_*
+  —— SwiftUI 侧可按名直接 `Image("...")` 引用
+- 风格统一为水彩 Q 版（与 holo 卡牌卡框裁切方式匹配）；单 scale 无 @2x/@3x，RGB 无透明通道（卡面图带背景）
+- 分支：`feat/assets-v2`（自 feat/ui-redesign `06ac420`）；UI 引用接入随 holo 分支后续进行
 
 ## [未发布] - 2026-11-02
 
