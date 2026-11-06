@@ -125,9 +125,12 @@ final class SkillEngineIntegrationTests: XCTestCase {
 
     func testWeekdayAttributionAcrossDates() {
         var engine = SettlementEngine(groups: [.games], characterSeed: 3)
-        // 2026-11-02 周一，2026-11-08 周日
-        let outcomes = engine.process([event("w1", .games, 10, date: "2026-11-02"),
-                                       event("w2", .games, 10, date: "2026-11-08")])
+        // 2026-11-02 周一，2026-11-08 周日；指定骰点 20（每分钟必中）保证两个游戏日都有抽选
+        var w1 = event("w1", .games, 10, date: "2026-11-02")
+        w1.diceOverride = 20
+        var w2 = event("w2", .games, 10, date: "2026-11-08")
+        w2.diceOverride = 20
+        let outcomes = engine.process([w1, w2])
         let draws = outcomes.compactMap { outcome -> [SkillDraw]? in
             if case .settled(let delta) = outcome { return delta.skillDraws }
             return nil
