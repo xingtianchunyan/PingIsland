@@ -15,6 +15,7 @@ public enum DiaryEntryType: String, Codable, Sendable {
     case monsterLose
     case dailyLife
     case oracleBoon // 骰点 20 神谕大成功（每日一次）
+    case milestone  // 每满 30 分钟的活动结算（真机反馈第十九批规则 v2）
 }
 
 public struct EncounterResult: Equatable, Sendable {
@@ -89,6 +90,12 @@ public enum DiaryText {
         }
         if key == "oracle.boon" {
             return "☀️ 神谕降临"
+        }
+        if key == "milestone.grant" {
+            return "🌊 半小时修行结算"
+        }
+        if key == "milestone.extra" {
+            return "✨ 命运的馈赠"
         }
         if key.hasPrefix("dailylife.") {
             let index = Int(key.dropFirst("dailylife.".count)) ?? -1

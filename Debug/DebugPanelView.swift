@@ -12,10 +12,14 @@ struct DebugPanelView: View {
     @State private var simMinutes = 30
     @State private var simDayOffset = 0
     /// 连注冲刺：连续 N 个模拟日、每天 480 分钟（快速拉高等级/触发高骰点条件）
-    @State private var streakDays = 3
+    /// 第十九批：默认 7 天，对齐职业觉醒最小观察天数（ClassAwakening.minObservationDays）
+    @State private var streakDays = 7
     /// 调试指定骰点（nil = 按运气正常掷骰）
     @State private var diceOverrideOn = false
     @State private var diceOverrideValue = 20
+    /// 触发条件开关（第十九批：开了直接满足、关了恢复规则判定）
+    @State private var forceGoldRain = false
+    @State private var foilOverride = 0
     @State private var simResult = ""
     @State private var statusLines: [String] = []
     @State private var recentEvents: [String] = []
@@ -47,22 +51,14 @@ struct DebugPanelView: View {
                 Picker("修行组", selection: $simGroup) {
                     ForEach(GroupSelection.orderedGroups, id: \.self) { Text($0.rawValue).tag($0) }
                 }
-                Stepper("阈值分钟：\(simMinutes)", value: $simMinutes, in: 30...480, step: 30)
-                // 快捷档位（第十八批）：常用阈值一键设置
-                HStack(spacing: 8) {
-                    ForEach([30, 60, 120, 240, 480], id: \.self) { value in
-                        Button("\(value)") { simMinutes = value }
-                            .font(.caption)
-                            .padding(.horizontal, 10).padding(.vertical, 5)
-                            .background(simMinutes == value ? .red.opacity(0.25) : Color(.secondarySystemGroupedBackground),
-                                        in: Capsule())
-                            .foregroundStyle(simMinutes == value ? .red : .secondary)
-                    }
+                Picker("阈值分钟", selection: $simMinutes) {
+                    ForEach([30, 60, 120, 240, 480], id: \.self) { Text("\($0)").tag($0) }
                 }
+                .pickerStyle(.segmented)
                 Toggle("指定骰点（调试）", isOn: $diceOverrideOn)
                 if diceOverrideOn {
                     Stepper("骰点：\(diceOverrideValue)", value: $diceOverrideValue, in: 1...20)
-                    Text("覆盖当日骰点：技能抽选门槛 ≥10；20 = 每分钟必掉且触发神谕")
+                    Text("覆盖当日骰点：<10 仅白/绿装备；=10 必得白绿蓝；10~19 六阶装备或特质技能；20 高级双赏 + 神谕")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 Button("注入模拟事件并结算") {
@@ -81,19 +77,47 @@ struct DebugPanelView: View {
                     simResult = summaries.joined(separator: "\n") + "\n已同步展示快照"
                     refresh()
                 }
-                Button("模拟过一天（不注入事件，仅切换日期）") {
+                Button("模拟过一天（新骰点 + 换日神谕）") {
                     simDayOffset += 1
                     SharedStore.defaults?.set(simDayOffset, forKey: SharedStore.Keys.simDayOffset)
-                    // 仅切换日期：按新日期重骰并刷新展示，不产生任何结算
-                    resyncDisplay(note: "已过天到 \(simDate(dayOffset: simDayOffset))（未注入事件）")
+                    // 第十九批：过天 = 真实场景的换日——先对新日期发神谕（骰 20 时），再刷新展示
+                    let newDate = simDate(dayOffset: simDayOffset)
+                    let base = SettlementCoordinator.store().directory.deletingLastPathComponent()
+                    if let service = try? SettlementService(store: SimulatedUsageSource.store(base: base),
+                                                          groups: Array(TrainingGroup.allCases),
+                                                          characterSeed: SimulatedUsageSource.seed) {
+                        let oracle = service.startDay(newDate)
+                        SettlementCoordinator.syncDisplayFromSimulated(service.engine)
+                        resyncDisplay(note: "已过天到 \(newDate)（\(oracle ? "神谕已发放" : "无神谕")）")
+                    } else {
+                        resyncDisplay(note: "已过天到 \(newDate)（账本不可读，仅切日期）")
+                    }
                 }
                 if simDayOffset > 0 {
-                    Text("模拟日期：今天 +\(simDayOffset) 天（每日新骰点）")
+                    Text("模拟日期：今天 +\(simDayOffset) 天（每日新骰点；过天即发当日神谕）")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 if !simResult.isEmpty {
                     Text(simResult).font(.caption).foregroundStyle(.secondary)
                 }
+            }
+            Section("触发条件开关（第十九批：开了直接满足，关了恢复规则判定）") {
+                Toggle("金雨预览（无视 LUK≥900 门槛）", isOn: $forceGoldRain)
+                    .onChange(of: forceGoldRain) { _, on in
+                        SharedStore.defaults?.set(on, forKey: SharedStore.Keys.debugForceGoldRain)
+                    }
+                Picker("闪卡档位预览", selection: $foilOverride) {
+                    Text("自动（按规则）").tag(0)
+                    Text("普通").tag(1)
+                    Text("银边").tag(2)
+                    Text("金边").tag(3)
+                    Text("全彩").tag(4)
+                }
+                .onChange(of: foilOverride) { _, value in
+                    SharedStore.defaults?.set(value, forKey: SharedStore.Keys.debugFoilOverride)
+                }
+                Text("角色卡与装备卡即时生效；仅供预览特效，不影响结算数据")
+                    .font(.caption2).foregroundStyle(.secondary)
             }
             Section("测试刷新") {
                 Button("刷新展示（重新同步快照/三个页面）") {
@@ -134,6 +158,8 @@ struct DebugPanelView: View {
         .onAppear {
             anomalySleepOn = SharedStore.defaults?.bool(forKey: SharedStore.Keys.anomalySleep) ?? false
             simDayOffset = SharedStore.defaults?.integer(forKey: SharedStore.Keys.simDayOffset) ?? 0
+            forceGoldRain = SharedStore.defaults?.bool(forKey: SharedStore.Keys.debugForceGoldRain) ?? false
+            foilOverride = SharedStore.defaults?.integer(forKey: SharedStore.Keys.debugFoilOverride) ?? 0
             refresh()
         }
     }
@@ -151,9 +177,18 @@ struct DebugPanelView: View {
             lines.append("共享容器：不可用（签名未授权 App Group——小组件将无法同步）")
         }
         if let snapshot = SnapshotIO.load() {
-            lines.append("快照：v\(snapshot.snapshotVersion) 等级 \(snapshot.level)")
+            lines.append("快照体检：v\(snapshot.snapshotVersion) 等级 \(snapshot.level) "
+                + "职业「\(snapshot.className)」 属性 \(snapshot.attributes?.count ?? 0) 项 "
+                + "特质技能 \(snapshot.skills?.count ?? 0) 个 装备栏 \(snapshot.equippedDetail?.count ?? 0) 件 "
+                + "骰点 \(snapshot.todayDice.map(String.init) ?? "无")")
         } else {
             lines.append("快照：不可读（尚未保存过）")
+        }
+        // 第十九批：职业觉醒观察进度（连注冲刺默认 7 天 = 觉醒最小观察天数）
+        if let engine = currentSimEngine() {
+            let p = engine.awakeningProgress
+            let minutesText = p.minutes.map { "\($0.key.rawValue) \($0.value)min" }.joined(separator: " ")
+            lines.append("觉醒进度：观察 \(p.days)/\(p.requiredDays) 天 · \(minutesText)")
         }
         lines.append("账本格式：JSON v1（状态+日志，原子写）")
         if let at = SharedStore.defaults?.object(forKey: SharedStore.Keys.monitorRegisteredAt) as? Date {
@@ -257,9 +292,12 @@ struct DebugPanelView: View {
                 + "结算=\(outcome) 等级=\(service.engine.level) "
                 + "日记=\(service.engine.diary.count) 条 高水位=\(SimulatedUsageSource.eventCount(base: base))"
             if case .settled(let delta) = outcome {
-                let newEquipment = delta.explorations.reduce(0) { $0 + $1.equipment.count }
-                if delta.explorations.count > 0 {
-                    text += "\n探索 \(delta.explorations.count) 次，新装备 \(newEquipment) 件"
+                let newEquipment = delta.milestoneGrants.reduce(0) { $0 + $1.allEquipment.count }
+                if delta.milestoneGrants.count > 0 {
+                    text += "\n活动结算 \(delta.milestoneGrants.count) 次，新装备 \(newEquipment) 件"
+                    if let extra = delta.milestoneGrants.compactMap({ MilestoneRules.describeExtra($0) }).first {
+                        text += "\n\(extra)"
+                    }
                 }
                 if delta.newMinutes == 0 {
                     text += "\n该事件无新增入账分钟（同组同日该阈值已入账，补差不倒退）。调高阈值或过天再注入。"

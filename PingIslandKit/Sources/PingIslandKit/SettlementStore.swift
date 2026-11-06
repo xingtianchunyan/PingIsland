@@ -95,6 +95,15 @@ public final class SettlementService {
         events.map { process($0) }
     }
 
+    /// 新的一天开始（真机反馈第十九批）：建立当日骰点 + 骰 20 发放每日一次神谕。
+    /// 调试"模拟过一天"等换日入口使用；事件结算路径内部也会调用（幂等）。
+    @discardableResult
+    public func startDay(_ localDate: String, recordedAt: Date = Date()) -> Bool {
+        let issued = engine.startDay(localDate, recordedAt: recordedAt)
+        try? store.saveState(encoder.encode(engine))
+        return issued
+    }
+
     private func loadJournal() throws -> [UsageEvent]? {
         guard let data = try store.loadJournal() else { return nil }
         return try decoder.decode([UsageEvent].self, from: data)

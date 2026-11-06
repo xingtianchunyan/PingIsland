@@ -19,6 +19,10 @@ public enum SharedStore {
         public static let anomalySleep = "anomalySleep.v1"
         /// 调试"模拟过一天"偏移（今天 + N 天；持久化，展示层今天判定基准）
         public static let simDayOffset = "simDayOffset.v1"
+        /// 调试：强制金雨预览（无视 LUK≥900 门槛，开了直接满足触发条件）
+        public static let debugForceGoldRain = "debug.forceGoldRain.v1"
+        /// 调试：闪卡档位覆盖（0 = 自动按规则；1 普通 / 2 银边 / 3 金边 / 4 全彩）
+        public static let debugFoilOverride = "debug.foilOverride.v1"
     }
 }
 

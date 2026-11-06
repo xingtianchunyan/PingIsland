@@ -33,10 +33,10 @@ final class PresentationPolicyTests: XCTestCase {
         XCTAssertEqual(PresentationPolicy.resolve(PresentationInput(latestDelta: d)), .milestone)
     }
 
-    func testExplorationRewardIsMilestone() {
+    func testMilestoneGrantIsMilestone() {
         var d = SettlementDelta.zero
-        d.explorations = [ExplorationReward(kind: .equipment, rarity: .blue, equipment: [],
-                                            attributePoints: [:], charmExtraTriggered: false)]
+        d.milestoneGrants = [MilestoneGrant(experienceXP: 10, mainEquipment: nil,
+                                            mainSkill: nil, extraEquipment: nil)]
         XCTAssertEqual(PresentationPolicy.resolve(PresentationInput(latestDelta: d)), .milestone)
     }
 

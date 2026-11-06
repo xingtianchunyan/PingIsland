@@ -55,6 +55,29 @@ enum HoloFoil {
         if level >= 100 { return .silverEdge }
         return .plain
     }
+
+    /// 调试档位覆盖（0 = 自动，1 = 普通，2 = 银边，3 = 金边，4 = 全彩）
+    static func debugOverride(_ raw: Int) -> HoloFoil? {
+        switch raw {
+        case 1: return .plain
+        case 2: return .silverEdge
+        case 3: return .goldEdge
+        case 4: return .rainbow
+        default: return nil
+        }
+    }
+
+    /// 调试覆盖后的角色卡档位（无覆盖时按等级自动）
+    static func effectiveCharacter(level: Int) -> HoloFoil {
+        let raw = SharedStore.defaults?.integer(forKey: SharedStore.Keys.debugFoilOverride) ?? 0
+        return debugOverride(raw) ?? character(level: level)
+    }
+
+    /// 调试覆盖后的装备卡档位（无覆盖时按稀有度自动）
+    static func effectiveEquipment(rarity: Int) -> HoloFoil {
+        let raw = SharedStore.defaults?.integer(forKey: SharedStore.Keys.debugFoilOverride) ?? 0
+        return debugOverride(raw) ?? equipment(rarity: rarity)
+    }
 }
 
 // MARK: - 2.5D 倾斜交互（小角度翻转，松手回正）

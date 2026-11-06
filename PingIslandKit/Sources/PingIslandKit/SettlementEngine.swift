@@ -44,7 +44,8 @@ public struct SettlementDelta: Equatable, Sendable {
     public var growthMilliApplied: Int64
     public var newMinutes: Int
     public var levelAfter: Int64
-    public var explorations: [ExplorationReward]
+    /// 本事件结算出的半小时活动结果（真机反馈第十九批规则 v2；原 explorations 字段由本字段取代）
+    public var milestoneGrants: [MilestoneGrant]
     public var diaries: [DiaryRecord]
     public var classChanged: CharacterClass?
     public var oracleIssued: Bool
@@ -52,7 +53,7 @@ public struct SettlementDelta: Equatable, Sendable {
     public var skillDraws: [SkillDraw]
 
     public static let zero = SettlementDelta(growthMilliApplied: 0, newMinutes: 0,
-                                             levelAfter: 1, explorations: [], diaries: [],
+                                             levelAfter: 1, milestoneGrants: [], diaries: [],
                                              classChanged: nil, oracleIssued: false,
                                              skillDraws: [])
 }
@@ -111,6 +112,11 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
 
     public var level: Int64 { growth.level }
 
+    /// 调试面板展示用：职业觉醒观察进度（已观察天数 / 需要天数 / 各组分钟）
+    public var awakeningProgress: (days: Int, requiredDays: Int, minutes: [TrainingGroup: Int]) {
+        (observationDays.count, ClassAwakening.minObservationDays, observationMinutes)
+    }
+
     /// 某日已入账的确认分钟合计（疲劳展示等只读用途）
     public func confirmedMinutes(on localDate: String) -> Int {
         appliedThreshold[localDate]?.reduce(0) { $0 + $1.value } ?? 0
@@ -125,6 +131,34 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
                               localDate: localDate, timeZoneID: "local")
         return segment.ensureDice(luckSnapshot: finalAttributes()[.luk, default: 1],
                                   rng: &rng).value
+    }
+
+    /// 新的一天开始（真机反馈第十九批）：建立当日骰点；骰 20 时发放每日一次的神谕奖励。
+    /// 换日即触发、不占活动结算次数；幂等（同日重复调用零开销）。
+    /// 展示/调试层在换日时直接调用本方法；事件结算路径也会调用。
+    @discardableResult
+    public mutating func startDay(_ localDate: String, recordedAt: Date = Date()) -> Bool {
+        var segment = segments[localDate]
+            ?? GameDaySegment(segmentID: Int64(segments.count + 1),
+                              localDate: localDate, timeZoneID: "local")
+        var diceRng = SeededRandom(seed: diceSeed(for: localDate))
+        let dice = segment.ensureDice(luckSnapshot: finalAttributes()[.luk, default: 1],
+                                      rng: &diceRng).value
+        var issued = false
+        if dice >= 20 && segment.tryIssueOracleReward() {
+            var oracleRng = SeededRandom(seed: fnv1a64("oracle|\(localDate)"))
+            let amount = oracleRng.nextInt(lowerBound: 5, upperBound: 10)
+            let attr = RulesConfig.oraclePackAttributes[
+                oracleRng.nextInt(upperBound: RulesConfig.oraclePackAttributes.count)]
+            baseAttributes[attr, default: 0] += amount
+            diary.append(DiaryRecord(
+                recordedAt: recordedAt, group: .other,
+                entryType: .oracleBoon, textKey: "oracle.boon",
+                rewardSummary: "神谕奖励 +\(amount) \(attr.rawValue)"))
+            issued = true
+        }
+        segments[localDate] = segment
+        return issued
     }
 
     /// 以修行组选择初始化：随机分配 10 点初始属性（种子固定，可重建）
@@ -155,92 +189,66 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
         var segment = segments[event.localDate]
             ?? GameDaySegment(segmentID: Int64(segments.count + 1),
                               localDate: event.localDate, timeZoneID: "local")
-        var diceRng = SeededRandom(seed: diceSeed(for: event.localDate))
         // 调试专用：模拟事件可指定骰点（钳制 [1,20]），生产事件恒为 nil 走正常掷骰
         if let override = event.diceOverride {
             segment.dice = DailyDice(value: min(20, max(1, override)))
         }
-        let luckSnapshot = finalAttributes()[.luk, default: 1]
-        let dice = segment.ensureDice(luckSnapshot: luckSnapshot, rng: &diceRng).value
+        segments[event.localDate] = segment
+        // 4. 一天开始：建立骰点 + 骰 20 发放每日一次的神谕（换日即触发，不占活动结算次数）
+        delta.oracleIssued = startDay(event.localDate, recordedAt: event.confirmedAt)
+        let dice = segments[event.localDate]?.dice?.value ?? 10
 
-        // 4. 骰点 20：建段时立即发放一次神谕奖励（每日一次），日记明确记录大成功
-        if dice >= 20 {
-            var oracleRng = SeededRandom(seed: fnv1a64("oracle|\(event.localDate)"))
-            if segment.tryIssueOracleReward() {
-                let amount = oracleRng.nextInt(lowerBound: 5, upperBound: 10)
-                let attr = RulesConfig.oraclePackAttributes[
-                    oracleRng.nextInt(upperBound: RulesConfig.oraclePackAttributes.count)]
-                baseAttributes[attr, default: 0] += amount
-                delta.oracleIssued = true
-                delta.diaries.append(DiaryRecord(
-                    recordedAt: event.confirmedAt, group: event.group,
-                    entryType: .oracleBoon, textKey: "oracle.boon",
-                    rewardSummary: "神谕奖励 +\(amount) \(attr.rawValue)"))
-            }
-        }
-
-        // 5. 线性成长
+        // 5. 每分钟成长（真机反馈第十九批规则 v2）：固定 1 XP/分钟，不结算其它内容
+        var dayMilli: Int64 = 0
         if newMinutes > 0 {
-            let factor: GrowthFactor
-            if let cls = classState {
-                factor = (cls == .ranger) ? .ranger : .matched
-            } else {
-                factor = .neutral
-            }
-            let appliedMilli = growth.settle(minutes: newMinutes, dice: dice, factor: factor)
-            delta.growthMilliApplied = appliedMilli
-            delta.newMinutes = newMinutes
-            // 规则 v1.1：基础智慧 = 初始智慧 +（等级 − 1），每升 1 级 +1 智慧；
-            // 按等级增量补（100 XP 一级，跨段余量不进位）
-            let newLevel = growth.level
-            let oldLevel = 1 + (growth.totalMilli - appliedMilli) / 100_000
-            baseAttributes[.wis, default: 0] += Int(newLevel - oldLevel)
-            // 按日聚合（周视图）：同日多事件累加，等级增量按本段前后差计
-            var ds = dayStats[event.localDate] ?? DayStats()
-            ds.minutes += newMinutes
-            ds.growthMilli += appliedMilli
-            ds.levelGained += Int(newLevel - oldLevel)
-            dayStats[event.localDate] = ds
+            dayMilli += growth.settle(minutes: newMinutes, dice: 10, factor: .neutral)
         }
 
-        // 5.5 技能抽选（9.6，真机反馈第十八批修订）：骰点 ≥ 10 的分钟才有确定性命中机会，
-        // 每分钟独立判定（种子/骰点/分钟序号/星期），未命中分钟不进收藏也不进 delta
-        if newMinutes > 0 {
-            let weekday = SkillDrawRules.weekday(forLocalDate: event.localDate)
-            for i in 0..<newMinutes {
-                let minuteIndex = applied + i + 1
-                guard SkillDrawRules.occurs(characterSeed: characterSeed, dice: dice,
-                                            minuteIndex: minuteIndex, weekday: weekday) else { continue }
-                let draw = SkillDrawRules.draw(
-                    characterSeed: characterSeed, dice: dice,
-                    minuteIndex: minuteIndex, weekday: weekday)
-                skillCollection.add(draw)
-                delta.skillDraws.append(draw)
-            }
-        }
-
-        // 6. 探索：每满 30 分钟一次，每组每日最多 5 次；一次跨多个里程碑按序补算
+        // 6. 每满 30 分钟一次活动结算（规则 v2）：经验加成 30×骰点/10 + 按骰点分档得装备或特质/技能
         let milestoneCount = event.thresholdMinutes / RulesConfig().explorationThresholdMinutes
         let previousMilestones = applied / RulesConfig().explorationThresholdMinutes
         let due = max(0, min(milestoneCount, RulesConfig().maxExplorationsPerGroupPerDay)
                         - previousMilestones)
         var equipmentID = equipment.count
-        for _ in 0..<due {
+        let weekday = SkillDrawRules.weekday(forLocalDate: event.localDate)
+        for index in 0..<due {
             guard segment.tryConsumeExploration(for: event.group) else { break }
-            var exploreRng = SeededRandom(seed: fnv1a64(
-                "explore|\(event.stableEventID)|\(segment.explorationsUsedByGroup[event.group] ?? 0)"))
-            let charm = finalAttributes()[.cha, default: 0]
-            let reward = ExplorationRules.resolve(dice: dice, finalCharm: charm,
-                                                  equipmentID: &equipmentID, rng: &exploreRng)
-            apply(reward, recordedAt: event.confirmedAt,
-                  origin: "探索获得·\(event.thresholdMinutes) 分钟里程碑")
-            delta.explorations.append(reward)
-
-            var encRng = SeededRandom(seed: fnv1a64("encounter|\(event.stableEventID)"))
-            let encounter = EncounterRules.resolve(rng: &encRng)
-            delta.diaries.append(EncounterRules.makeDiary(
+            var milestoneRng = SeededRandom(seed: fnv1a64(
+                "milestone|\(event.stableEventID)|\(previousMilestones + index + 1)"))
+            let grant = MilestoneRules.resolve(dice: dice, weekday: weekday,
+                                               equipmentID: &equipmentID, rng: &milestoneRng)
+            apply(equipment: grant.allEquipment, recordedAt: event.confirmedAt,
+                  origin: "修行活动·\(event.thresholdMinutes) 分钟里程碑")
+            if let skill = grant.mainSkill { skillCollection.add(skill) }
+            // 活动经验加成入账（3×骰点 XP，以 dice=10 的 settle 折算为千分点）
+            dayMilli += growth.settle(minutes: grant.experienceXP, dice: 10, factor: .neutral)
+            delta.milestoneGrants.append(grant)
+            delta.diaries.append(DiaryRecord(
                 recordedAt: event.confirmedAt, group: event.group,
-                encounter: encounter, rewardSummary: summarize(reward)))
+                entryType: .milestone, textKey: "milestone.grant",
+                rewardSummary: MilestoneRules.describe(grant)))
+            // 骰 20 额外装备独立成条（真机反馈第十九批：主结果与额外装备各一条日记）
+            if let extraSummary = MilestoneRules.describeExtra(grant) {
+                delta.diaries.append(DiaryRecord(
+                    recordedAt: event.confirmedAt, group: event.group,
+                    entryType: .milestone, textKey: "milestone.extra",
+                    rewardSummary: extraSummary))
+            }
+        }
+
+        // 7. 等级推进：规则 v1.1 基础智慧 = 初始智慧 +（等级 − 1），按本事件前后等级差补点
+        if dayMilli > 0 {
+            delta.growthMilliApplied = dayMilli
+            delta.newMinutes = newMinutes
+            let newLevel = growth.level
+            let oldLevel = 1 + (growth.totalMilli - dayMilli) / 100_000
+            baseAttributes[.wis, default: 0] += Int(newLevel - oldLevel)
+            // 按日聚合（周视图）：同日多事件累加，等级增量按本段前后差计
+            var ds = dayStats[event.localDate] ?? DayStats()
+            ds.minutes += newMinutes
+            ds.growthMilli += dayMilli
+            ds.levelGained += Int(newLevel - oldLevel)
+            dayStats[event.localDate] = ds
         }
 
         // 7. 职业观察（定型后不追溯、不重判）
@@ -284,11 +292,10 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
 
     // MARK: - 内部
 
-    private mutating func apply(_ reward: ExplorationReward, recordedAt: Date, origin: String) {
-        for (attr, points) in reward.attributePoints {
-            baseAttributes[attr, default: 0] += points
-        }
-        for var item in reward.equipment {
+    /// 新装备入账：与同部位当前装备择优，未穿上的仍入收藏（执行文档 9.4）
+    private mutating func apply(equipment newItems: [EquipmentItem],
+                                recordedAt: Date, origin: String) {
+        for var item in newItems {
             item.acquiredAt = recordedAt
             item.origin = origin
             if let current = equipped[item.slot],
@@ -306,24 +313,6 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
             equipped[item.slot] = item
             equipment.append(item)
         }
-    }
-
-    private func summarize(_ reward: ExplorationReward) -> String {
-        var parts: [String] = []
-        if !reward.attributePoints.isEmpty {
-            let desc = reward.attributePoints
-                .sorted { $0.key.rawValue < $1.key.rawValue }
-                .map { "+\($0.value) \($0.key.rawValue)" }
-                .joined(separator: "、")
-            parts.append("属性 \(desc)")
-        }
-        if !reward.equipment.isEmpty {
-            parts.append("装备 ×\(reward.equipment.count)")
-        }
-        if reward.kind == .activeSkill || reward.kind == .passiveSkill {
-            parts.append("技能/特质（模板 Phase 4 接入）")
-        }
-        return parts.isEmpty ? "无奖励" : parts.joined(separator: "，")
     }
 
     private func diceSeed(for localDate: String) -> UInt64 {

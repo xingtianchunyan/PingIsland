@@ -453,7 +453,7 @@ private struct EquipmentHoloCard: View {
             costBadge: "\(item.totalValue)",
             typeLine: "装备 · \(rarityName)阶 · 评 \(item.totalValue)",
             textBox: item.affixText + flavorText + originLine,
-            foil: HoloFoil.equipment(rarity: item.rarity),
+            foil: HoloFoil.effectiveEquipment(rarity: item.rarity),
             rarityColor: rarityColor
         ) {
             ZStack {

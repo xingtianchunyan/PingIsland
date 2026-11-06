@@ -45,7 +45,7 @@ public enum PresentationPolicy {
         if input.hasAnomalySleep { return .confirmedAnomalySleep }
         if input.isNight { return .nightRest }
         if let d = input.latestDelta {
-            if d.oracleIssued || d.classChanged != nil || !d.explorations.isEmpty {
+            if d.oracleIssued || d.classChanged != nil || !d.milestoneGrants.isEmpty {
                 return .milestone
             }
             if d.diaries.contains(where: { $0.entryType == .monsterWin || $0.entryType == .monsterLose }) {

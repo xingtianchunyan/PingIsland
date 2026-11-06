@@ -1,19 +1,20 @@
 import PingIslandKit
 import SwiftUI
 
-/// 角色主页（执行文档 5.3-1，第十八批球星卡重构）：
-/// 中央 = 球星卡式角色卡（立绘 + 卡内六维雷达，闪卡按等级；运气 ≥ 900 卡面下金雨），
-/// 装备栏 · 特质栏左右浮在卡牌上方（z 轴叠放，半透明底保证可读）。只读展示快照。
+/// 角色主页（执行文档 5.3-1，第十九批球星卡重构）：
+/// 中央 = 球星卡式角色卡（立绘铺满整卡、六维雷达覆盖在立绘上层，仍是卡面内容；
+/// 闪卡按等级；运气 ≥900 或调试开关强制 → 卡面下金雨）。
+/// 装备栏 · 特质栏为卡牌下方的普通双列（第十九批撤掉浮层，后续按数据做动效）。只读展示快照。
 struct CharacterHomeView: View {
     @State private var snapshot: DisplaySnapshot = SnapshotIO.load() ?? DisplaySnapshot()
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 12) {
+                VStack(spacing: 14) {
                     cardSection
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 12)
                 .padding(.vertical, 8)
             }
             .background(Color(.systemGroupedBackground))
@@ -26,50 +27,48 @@ struct CharacterHomeView: View {
         }
     }
 
-    /// 球星卡 + 浮层双栏：装备栏居左缘、特质栏居右缘，叠在卡牌上层
+    /// 球星卡 + 卡下双栏：装备栏居左、特质栏居右（普通布局，非浮层）
     private var cardSection: some View {
-        ZStack(alignment: .top) {
+        VStack(spacing: 14) {
             CharacterSportsCard(snapshot: snapshot)
                 .frame(maxWidth: .infinity)
             heroRow
-                .padding(.top, 14)
         }
     }
 
-    // 装备栏 · 特质栏（浮在卡牌上方的左右两列）
+    // 装备栏 · 特质栏（卡牌下方的左右两列）
     private var heroRow: some View {
         HStack(alignment: .top, spacing: 0) {
-            floatingColumn { EquipmentColumn(details: snapshot.equippedDetail) }
+            EquipmentColumn(details: snapshot.equippedDetail)
             Spacer(minLength: 0)
-            floatingColumn { TraitColumn(skills: snapshot.skills, todayDice: snapshot.todayDice) }
+            TraitColumn(skills: snapshot.skills, todayDice: snapshot.todayDice)
         }
-    }
-
-    /// 浮层通用容器：细透明材质底 + 圆角，保证叠在卡面立绘上仍可读
-    private func floatingColumn<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        content()
-            .padding(6)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-            .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
     }
 }
 
-/// 球星卡式角色卡（第十八批重构，替代原万智牌式卡框）：
-/// - 立绘占卡面上半（接 class_* 美术资产；觉醒前用岛屿图标占位）
-/// - 六维雷达是卡面内容的一部分（立绘下方、卡内底部），不再置于卡牌之外
-/// - 等级 <100 普通卡面；100~199 银边闪；200~399 金边闪；≥400 全彩闪；运气 ≥900 金雨
+/// 球星卡式角色卡（第十九批重构）：
+/// - 立绘 .fill 铺满整卡（职业立绘优先，未觉醒用夜间睡姿图兜底，最后 emoji）
+/// - 六维雷达覆盖在立绘上层（卡面内容的一部分，垫半透明面板保证可读）
+/// - 卡底深色 scrim 承载名字条 / 日记风味行
+/// - 卡牌尽量铺满屏幕宽度（水平仅留 12pt），高宽比 0.68
+/// - 等级 <100 普通；100~199 银边；200~399 金边；≥400 全彩；运气 ≥900 金雨（均支持调试开关预览）
 /// - 拖动卡面小角度翻转，松手回正
 private struct CharacterSportsCard: View {
     let snapshot: DisplaySnapshot
 
-    private var foil: HoloFoil { HoloFoil.character(level: snapshot.level) }
+    private var foil: HoloFoil { HoloFoil.effectiveCharacter(level: snapshot.level) }
 
     private var luck: Int { snapshot.attributes?["LUK"] ?? 0 }
 
-    /// 职业立绘键（内容库 imageset 名）；未觉醒（觉醒中）用岛屿 App 图标占位
+    /// 调试开关：强制金雨（开了直接满足触发条件，关掉恢复 LUK≥900 判定）
+    private var forceGoldRain: Bool {
+        SharedStore.defaults?.bool(forKey: SharedStore.Keys.debugForceGoldRain) ?? false
+    }
+
+    /// 职业立绘键；未觉醒（觉醒中）用夜间睡姿图兜底（app_icon 键悬空，不再使用）
     private var classArtKey: String? {
         CardArt.classArtKey(className: snapshot.className)
-            ?? ContentLibrary.shared?.appIconKey
+            ?? ContentLibrary.shared?.nightSleepArtKey
     }
 
     /// 觉醒前占位符号（立绘缺失时的兜底）
@@ -120,26 +119,44 @@ private struct CharacterSportsCard: View {
                     // 外框（卡牌黑边）
                     RoundedRectangle(cornerRadius: corner)
                         .fill(Color(white: 0.12))
-                    // 卡面（米白卡纸）
-                    RoundedRectangle(cornerRadius: corner * 0.8)
-                        .fill(Color(red: 0.95, green: 0.92, blue: 0.86))
+                    // 立绘铺满整卡
+                    cardFaceArt(width: geo.size.width)
+                        .clipShape(RoundedRectangle(cornerRadius: corner * 0.8))
                         .padding(geo.size.width * 0.02)
-                    // 卡面内容
-                    VStack(spacing: geo.size.width * 0.025) {
-                        artWindow(width: geo.size.width)
-                        nameBar(width: geo.size.width)
-                        // 六维雷达：卡面内容的一部分（第十八批）
-                        RadarChart(values: radarValues, labels: radarKeys, maxValue: radarMax)
-                            .frame(height: geo.size.width * 0.52)
+                    // 六维雷达：覆盖在立绘上层，仍是卡面内容（垫半透明面板保证可读）
+                    VStack {
+                        Spacer()
+                        RadarChart(values: radarValues, labels: radarKeys, maxValue: radarMax,
+                                   tint: .white, grid: .white)
+                            .frame(height: geo.size.width * 0.48)
                             .padding(.horizontal, geo.size.width * 0.06)
-                        Text(cardText)
-                            .font(.system(size: geo.size.width * 0.032, design: .serif))
-                            .foregroundStyle(.black.opacity(0.75))
-                            .lineLimit(2)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, geo.size.width * 0.06)
+                            .padding(.vertical, geo.size.width * 0.02)
+                            .background(.ultraThinMaterial.opacity(0.55),
+                                        in: RoundedRectangle(cornerRadius: 16))
+                            .padding(.horizontal, geo.size.width * 0.05)
+                            .padding(.bottom, geo.size.width * 0.26)
                     }
-                    .padding(.vertical, geo.size.width * 0.045)
+                    // 卡底深色 scrim：名字条 + 日记风味行
+                    VStack {
+                        Spacer()
+                        LinearGradient(colors: [.clear, .black.opacity(0.8)],
+                                       startPoint: .top, endPoint: .bottom)
+                            .frame(height: geo.size.width * 0.36)
+                            .overlay(alignment: .bottom) {
+                                VStack(spacing: 4) {
+                                    nameBar(width: geo.size.width)
+                                    Text(cardText)
+                                        .font(.system(size: geo.size.width * 0.032, design: .serif))
+                                        .foregroundStyle(.white.opacity(0.85))
+                                        .lineLimit(2)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .padding(.horizontal, geo.size.width * 0.07)
+                                .padding(.bottom, geo.size.width * 0.035)
+                            }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: corner * 0.8))
+                    .padding(geo.size.width * 0.02)
                     // 闪卡覆层：全彩 = 整面；银/金 = 边缘流光描边；普通 = 轻微高光
                     if foil == .rainbow {
                         FoilOverlay(foil: foil)
@@ -167,7 +184,7 @@ private struct CharacterSportsCard: View {
                 }
             }
             .aspectRatio(0.68, contentMode: .fit)
-            .frame(width: 320)
+            .frame(maxWidth: .infinity)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("角色卡：\(snapshot.className)，等级\(snapshot.level)，\(snapshot.fatigueText)。拖动可翻转卡牌。")
@@ -175,27 +192,26 @@ private struct CharacterSportsCard: View {
 
     // MARK: - 卡面分区
 
-    /// 立绘区：职业立绘（接美术资产）+ 金雨 + LUK 徽章
-    private func artWindow(width: CGFloat) -> some View {
+    /// 立绘铺满整卡：职业立绘优先（未觉醒用夜间睡姿图兜底）+ 金雨 + LUK 徽章
+    private func cardFaceArt(width: CGFloat) -> some View {
         ZStack {
-            LinearGradient(colors: [.indigo.opacity(0.35), .teal.opacity(0.15)],
+            LinearGradient(colors: [.indigo.opacity(0.45), .black.opacity(0.6)],
                            startPoint: .top, endPoint: .bottom)
             if let key = classArtKey {
                 Image(key)
                     .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .shadow(color: .black.opacity(0.3), radius: 6, y: 4)
+                    .aspectRatio(contentMode: .fill)
             } else {
                 Text(classEmoji)
                     .font(.system(size: width * 0.3))
                     .shadow(color: .black.opacity(0.35), radius: 5, y: 3)
             }
-            if luck >= 900 {
+            if luck >= 900 || forceGoldRain {
                 GoldRain()
             }
             VStack {
                 HStack {
-                    if luck >= 900 {
+                    if luck >= 900 || forceGoldRain {
                         Text("LUK \(luck)")
                             .font(.caption2.bold().monospacedDigit())
                             .foregroundStyle(Color(red: 0.75, green: 0.55, blue: 0.1))
@@ -208,19 +224,14 @@ private struct CharacterSportsCard: View {
                 Spacer()
             }
         }
-        .frame(height: width * 0.46)
-        .clipShape(RoundedRectangle(cornerRadius: width * 0.03))
-        .padding(.horizontal, geoWidthPadding(width))
     }
 
-    private func geoWidthPadding(_ width: CGFloat) -> CGFloat { width * 0.045 }
-
-    /// 名字条：职业名 + 等级徽章 + 疲劳/状态
+    /// 名字条：职业名 + 等级徽章（白字，压在深色 scrim 上）
     private func nameBar(width: CGFloat) -> some View {
         HStack(alignment: .center, spacing: 6) {
             Text(snapshot.className)
                 .font(.system(size: width * 0.055, weight: .bold, design: .serif))
-                .foregroundStyle(.black.opacity(0.85))
+                .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             Spacer(minLength: 2)
@@ -230,11 +241,8 @@ private struct CharacterSportsCard: View {
                 .frame(width: width * 0.11, height: width * 0.11)
                 .background(Circle().fill(badgeColor))
         }
-        .padding(.horizontal, width * 0.025)
+        .padding(.horizontal, width * 0.02)
         .padding(.vertical, width * 0.008)
-        .background(Color(red: 0.98, green: 0.95, blue: 0.87),
-                    in: RoundedRectangle(cornerRadius: width * 0.02))
-        .padding(.horizontal, geoWidthPadding(width))
     }
 
     // MARK: - 雷达数据
@@ -384,10 +392,13 @@ private struct TraitColumn: View {
 }
 
 /// 自绘六边形雷达：3 层网格环 + 数据多边形 + 轴标签
+/// tint/grid 可参数化：默认保持原 indigo/secondary（浅色底），卡面立绘上用白色
 private struct RadarChart: View {
     let values: [Double]
     let labels: [String]
     let maxValue: Double
+    var tint: Color = .indigo
+    var grid: Color = .secondary
 
     var body: some View {
         GeometryReader { geo in
@@ -397,7 +408,7 @@ private struct RadarChart: View {
                 // 网格环（25% / 50% / 75% / 100%）
                 ForEach([0.25, 0.5, 0.75, 1.0], id: \.self) { fraction in
                     PolygonShape(vertexCount: values.count, radius: radius * fraction)
-                        .stroke(.secondary.opacity(0.25), lineWidth: 1)
+                        .stroke(grid.opacity(0.35), lineWidth: 1)
                 }
                 // 轴
                 ForEach(Array(0..<values.count), id: \.self) { index in
@@ -406,15 +417,15 @@ private struct RadarChart: View {
                         path.move(to: center)
                         path.addLine(to: vertex(center: center, radius: radius, angle: angle))
                     }
-                    .stroke(.secondary.opacity(0.25), lineWidth: 1)
+                    .stroke(grid.opacity(0.35), lineWidth: 1)
                 }
                 // 数据多边形
                 RadarPolygonShape(center: center, radius: radius, values: values,
                                   maxValue: maxValue)
-                    .fill(.indigo.opacity(0.35))
+                    .fill(tint.opacity(0.35))
                 RadarPolygonShape(center: center, radius: radius, values: values,
                                   maxValue: maxValue)
-                    .stroke(.indigo, lineWidth: 2)
+                    .stroke(tint, lineWidth: 2)
                 // 顶点数值 + 轴标签
                 ForEach(Array(0..<values.count), id: \.self) { index in
                     let angle = angleFor(index)
@@ -423,13 +434,13 @@ private struct RadarChart: View {
                                        radius: radius * CGFloat(value / maxValue),
                                        angle: angle)
                     Circle()
-                        .fill(.indigo)
+                        .fill(tint)
                         .frame(width: 6, height: 6)
                         .position(point)
                     let labelPoint = vertex(center: center, radius: radius + 14, angle: angle)
                     Text("\(labels[index]) \(Int(value))")
                         .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(grid)
                         .position(labelPoint)
                 }
             }
