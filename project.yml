@@ -43,6 +43,9 @@ targets:
       path: App/PingIsland.entitlements
       properties:
         com.apple.developer.family-controls: true
+        # Live Activity/灵动岛必需（第十五批修复：此前只在 Info.plist 声明 NSSupportsLiveActivities，
+        # entitlement 缺失，重新签名后行为随机退化）
+        com.apple.developer.live-activities: true
         com.apple.security.application-groups:
           - group.com.pingisland.shared
     dependencies:
@@ -94,6 +97,8 @@ targets:
     entitlements:
       path: PingIslandWidgets/PingIslandWidgets.entitlements
       properties:
+        # Live Activity 视图渲染在 Widget 扩展里，扩展同样需要该 entitlement（第十五批修复）
+        com.apple.developer.live-activities: true
         com.apple.security.application-groups:
           - group.com.pingisland.shared
     dependencies:

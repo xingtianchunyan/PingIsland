@@ -124,6 +124,15 @@ struct DebugPanelView: View {
         } else {
             lines.append("监控注册：未注册或注册失败")
         }
+        // Live Activity 诊断（第十五批修复）：设置页每次开启/结束的结果与错误落在此处
+        let laDiag = LiveActivityDiagnostics.recentLines()
+        if laDiag.isEmpty {
+            lines.append("灵动岛诊断：暂无记录（在设置页开启实时活动后可见）")
+        } else {
+            for entry in laDiag.suffix(3) {
+                lines.append("灵动岛：\(entry)")
+            }
+        }
         lines.append("分组版本：\(SharedStore.defaults?.integer(forKey: SharedStore.Keys.selectionVersion) ?? 0)")
         let simBase = SettlementCoordinator.store().directory.deletingLastPathComponent()
         lines.append("生产账本：\(SettlementCoordinator.store().directory.path)")

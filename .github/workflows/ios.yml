@@ -6,7 +6,7 @@ name: ios
 
 on:
   push:
-    branches: [main, "chore/**", "feat/**", "spike/**", "test/**"]
+    branches: [main, "chore/**", "feat/**", "fix/**", "spike/**", "test/**"]
   pull_request:
   workflow_dispatch:
 
