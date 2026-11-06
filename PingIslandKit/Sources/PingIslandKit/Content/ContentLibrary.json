@@ -198,6 +198,6 @@
     "leaning": "fatigue_leaning", "sleeping": "fatigue_sleeping"
   },
   "nightSleepArtKey": "pose_night_sleep",
-  "monsterArtKeys": { "skeleton": "monster_skeleton", "goblin": "monster_goblin", "slime": "monster_slime" },
+  "monsterArtKeys": { "skeleton": "monster_skeleton", "goblin": "monster_goblin", "slime": "monster_slime", "sapling": "monster_sapling", "mushroom": "monster_mushroom", "salamander": "monster_salamander", "cinder_bat": "monster_cinder_bat", "rock_crab": "monster_rock_crab", "rust_puppet": "monster_rust_puppet", "water_wisp": "monster_water_wisp", "static_orb": "monster_static_orb", "thunder_fledgling": "monster_thunder_fledgling" },
   "appIconKey": "app_icon"
 }

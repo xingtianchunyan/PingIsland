@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-11-06 怪物扩展（feat/content-skills 批次二，monsters-v2）
+- 怪物图鉴键 3 → 12（六元素 × 2）：新增 树苗精/蘑菇怪/火蜥蜴/火花蝠/岩壳蟹/锈铁傀儡/小水灵/静电球/雷雀，
+  保留 小骷髅(土)/哥布林(金)/史莱姆(水)；`ContentLibrary.json` 的 `monsterArtKeys` 与
+  `ContentLibraryTests` 断言同步扩到 12 键（元素归属仅文档层标注，规则层 Monster 枚举扩 case 属 Phase A）
+- 新增 18 个 imageset（9 主图 768×768 RGBA + 9 `_widget` 240×240），沿用 v2 八段式契约同族风格
+- 遭遇抽取逻辑不变：旧 3 怪的 textKey/图鉴 rawValue 继续可解析，等概率与胜负 50/50 不受影响
+- 本地验证：JSON/测试期望/图片集三方交叉校验一致（本机 Device Guard 新策略拦截 XCTest 运行器，
+  完整 XCTest 以 CI macOS 运行器为准）
+
 ## 2026-11-06 内容库分支（feat/content-skills，自 feat/assets-v2）
 - 新增 PingIslandKit 内容库（`ContentLibrary.swift` + `Resources/ContentLibrary.json`，Bundle 资源随包分发）：
   72 项内容 = 12 技能模板（6 元素 × 主动/被动，与 SkillRules.template(forWeekday:) 单一来源强一致）× 6 稀有度变体，
