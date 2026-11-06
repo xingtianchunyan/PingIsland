@@ -29,6 +29,10 @@ targets:
       - path: Recovery
       - path: Shared
       - path: Resources
+      # 内容库 JSON：SwiftPM 资源在 Windows 工具链不可用（WindowsError 4551），
+      # 改由 App target 直接打包进主 bundle，ContentLibrary.load() 从 Bundle.main 读取
+      - path: PingIslandKit/Sources/PingIslandKit/Content/ContentLibrary.json
+        buildPhase: resources
     configFiles: {}
     settings:
       base:

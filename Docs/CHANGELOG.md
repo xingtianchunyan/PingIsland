@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## 2026-11-06 内容库分支（feat/content-skills，自 feat/assets-v2）
+- 新增 PingIslandKit 内容库（`ContentLibrary.swift` + `Resources/ContentLibrary.json`，Bundle 资源随包分发）：
+  72 项内容 = 12 技能模板（6 元素 × 主动/被动，与 SkillRules.template(forWeekday:) 单一来源强一致）× 6 稀有度变体，
+  含名称/描述/图标键/主动姿态键；装备 16 图标键、职业 8 立绘键、疲劳 5 阶段键、怪物/夜眠/AppIcon 键
+- 遵守"数值单一实现来源"：被动数值仍由 SkillRules 推导，本库只做内容与展示定义；
+  `isValid` 校验与测试共享同一实现，规则改名即测试失败
+- 新增 ContentLibraryTests 10 例（资源加载/模板数/命名一致/72 变体全覆盖/被动属性一致/图标键完整等）
+- 美术资产重制（生成规范见 Docs/资产v2-生成规范.md）：八轴契约 + master 基准图保证全套风格一致，
+  同名覆盖上一批；新增 45 张 `_widget` 后缀组件尺寸变体（职业/装备，供 Widget/灵动岛用）
+- 接入指南：Docs/美术资产与技能库接入指南.md
+- 交付包两处修正（本地 Windows XCTest 实测发现并修复）：
+  ① SwiftPM 资源处理在本机 Windows 工具链不可用（WindowsError 4551，最小复现亦失败）——
+  JSON 改放 `Sources/PingIslandKit/Content/`（目录名 Resources 会被 SwiftPM 隐式当资源处理），
+  Package.swift 保持原样；`ContentLibrary.load()` 改为 Bundle.main → 源码树路径两级回退，
+  project.yml 把 JSON 以 resources 构建阶段打进 App 主 bundle
+  ② JSON 缺周日（7）模板：周日与周六同为雷，查找时归一化到 6（与 SkillRules 映射一致），
+  修复前 16 个测试失败（周日 12 变体查不到）
+- 本地验证：Windows XCTest **118/118 通过**（原 108 + 内容库 10）
+- 分支：`feat/content-skills`；UI 侧引用（Image(图标键) 替换 SF Symbol 占位）随后续合并进行
+
 ## 2026-11-06 美术资源分支（feat/assets-v2）
 - 合入《PingIsland-Assets V2》：标准 .xcassets 结构 56 个 imageset / 93 张 PNG（约 22 MB）
 - 覆盖：8 职业立绘（768×1152）、16 装备图（4 部位 × 布/皮/铁/机甲外观，768×768）、
