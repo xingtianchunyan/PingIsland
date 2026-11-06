@@ -13,12 +13,17 @@ struct LiveActivityControls: View {
     @State private var busy = false
 
     var body: some View {
-        VStack(spacing: 8) {
-            Button("开启灵动岛 / 锁屏实时活动") { start() }
-                .disabled(busy)
-            Button("结束实时活动") { endAll() }
-                .foregroundStyle(.secondary)
-                .disabled(busy)
+        VStack(spacing: 12) {
+            // 第十七批：开启/结束改为并排两个等宽大按钮——原纵向紧贴间距 8，
+            // 真机容易误触到相邻按钮
+            HStack(spacing: 12) {
+                Button("开启实时活动") { start() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(busy)
+                Button("结束实时活动") { endAll() }
+                    .buttonStyle(.bordered)
+                    .disabled(busy)
+            }
             if !message.isEmpty {
                 Text(message).font(.caption).foregroundStyle(.secondary)
             }
