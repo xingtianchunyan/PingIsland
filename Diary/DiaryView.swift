@@ -233,10 +233,13 @@ private struct DiaryEntryRow: View {
     }
 }
 
-/// 收藏页（行天改版 v2）：上方四宫格 = 当前装备四部位；下方"今日获得"分区
-/// （与日记页当天同款行式，只保留当天获得的装备，过天自动清空）。探索自动获得，无需手动领取。
+/// 收藏页（行天改版 v2 + holo 升级）：上方四宫格 = 当前装备四部位，
+/// 点按卡片放大为可小角度翻转的 2.5D 万智牌式卡牌（闪卡按品阶），
+/// 再点按回归原样。下方"今日获得"分区与日记页当天同款行式。探索自动获得，无需手动领取。
 struct CollectionView: View {
     @State private var snapshot: DisplaySnapshot = SnapshotIO.load() ?? DisplaySnapshot()
+    /// 当前放大展示的装备卡（nil = 无放大）
+    @State private var expandedItem: DisplaySnapshot.EquippedDetail?
 
     /// 今天获得的装备（acquiredAt 在"有效今天"内；旧存档无获得时间的不计入）
     private var effectiveToday: Date {
@@ -252,16 +255,22 @@ struct CollectionView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 16) {
-                    if let equipped = snapshot.equippedDetail {
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())],
-                                  spacing: 12) {
-                            ForEach(Array(equipped.enumerated()), id: \.offset) { _, item in
-                                EquippedGridCard(item: item)
+            ZStack {
+                ScrollView {
+                    LazyVStack(spacing: 16) {
+                        if let equipped = snapshot.equippedDetail {
+                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())],
+                                      spacing: 12) {
+                                ForEach(Array(equipped.enumerated()), id: \.offset) { _, item in
+                                    EquippedGridCard(item: item) {
+                                        guard !item.isEmpty else { return }
+                                        withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
+                                            expandedItem = item
+                                        }
+                                    }
+                                }
                             }
                         }
-                    }
 
                     VStack(alignment: .leading, spacing: 10) {
                         Text("今日获得")
@@ -314,13 +323,145 @@ struct CollectionView: View {
                 SettlementCoordinator.settlePending()
                 snapshot = SnapshotIO.load() ?? DisplaySnapshot()
             }
-        }
+
+            // 放大的 2.5D 装备卡：点按/下拉关闭，卡面可拖动小角度翻转
+            if let item = expandedItem {
+                ExpandedEquipmentCard(item: item) {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        expandedItem = nil
+                    }
+                }
+                .zIndex(10)
+            }
+            } // ZStack
+        } // NavigationStack
     }
 }
 
-/// 四宫格装备卡：每部位一张（部位图标 + 词条或"未装备"）
+/// 放大态装备卡：半透明遮罩 + 居中 2.5D 万智牌式卡牌（HoloTilt 提供拖动翻转）
+private struct ExpandedEquipmentCard: View {
+    let item: DisplaySnapshot.EquippedDetail
+    let onDismiss: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.55)
+                .ignoresSafeArea()
+                .onTapGesture(perform: onDismiss)
+                .transition(.opacity)
+            GeometryReader { geo in
+                HoloTilt {
+                    EquipmentHoloCard(item: item)
+                }
+                .frame(width: min(320, geo.size.width - 48))
+                .position(x: geo.size.width / 2, y: geo.size.height / 2)
+                .onTapGesture(perform: onDismiss)
+            }
+        }
+        .accessibilityLabel(accessibilitySummary)
+    }
+
+    private var accessibilitySummary: String {
+        "\(item.slot)装备卡，\(item.affixText)，评\(item.totalValue)，轻点收起"
+    }
+}
+
+/// 装备万智牌卡：白/绿/蓝普通；紫银边闪；橙金边闪；红全彩闪（HoloFoil.equipment）
+private struct EquipmentHoloCard: View {
+    let item: DisplaySnapshot.EquippedDetail
+
+    private var rarityColor: Color {
+        guard !item.isEmpty else { return .gray }
+        switch Rarity(rawValue: item.rarity) {
+        case .green: return .green
+        case .blue: return .blue
+        case .purple: return .purple
+        case .orange: return .orange
+        case .red: return .red
+        default: return Color(white: 0.35)
+        }
+    }
+
+    private var rarityName: String {
+        switch Rarity(rawValue: item.rarity) {
+        case .green: return "绿"
+        case .blue: return "蓝"
+        case .purple: return "紫"
+        case .orange: return "橙"
+        case .red: return "红"
+        default: return "白"
+        }
+    }
+
+    /// 部位主视觉符号
+    private var slotIcon: String {
+        switch item.slot {
+        case "头部": return "crown.fill"
+        case "上身": return "tshirt.fill"
+        case "下身": return "figure.walk"
+        default: return "shoe.fill" // 足部
+        }
+    }
+
+    /// 外观类型 → 副视觉符号
+    private var appearanceIcon: String {
+        switch item.appearance {
+        case "皮甲": return "shield.lefthalf.filled"
+        case "铁甲": return "shield.fill"
+        case "机甲": return "cpu"
+        default: return "tshirt.fill" // 布甲
+        }
+    }
+
+    /// 品阶 → 风味语
+    private var flavorText: String {
+        switch Rarity(rawValue: item.rarity) {
+        case .purple: return "\n边缘流转着银色的微光，某种远方的魔法尚未散尽。"
+        case .orange: return "\n金色纹路沿边缘游走，仿佛有熔金在其中流动。"
+        case .red: return "\n整张卡都在虹彩中呼吸。传说它来自世界的裂缝。"
+        default: return "\n它在探索中被发现，安静地陪在主人身边。"
+        }
+    }
+
+    var body: some View {
+        MTGCardView(
+            name: "\(item.slot) · \(item.appearance)",
+            costBadge: "\(item.totalValue)",
+            typeLine: "装备 · \(rarityName)阶 · 评 \(item.totalValue)",
+            textBox: item.affixText + flavorText,
+            foil: HoloFoil.equipment(rarity: item.rarity),
+            rarityColor: rarityColor
+        ) {
+            ZStack {
+                LinearGradient(colors: [rarityColor.opacity(0.55), rarityColor.opacity(0.15)],
+                               startPoint: .top, endPoint: .bottom)
+                Image(systemName: slotIcon)
+                    .font(.system(size: 84, weight: .bold))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.4), radius: 6, y: 3)
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Image(systemName: appearanceIcon)
+                            .font(.title2)
+                            .foregroundStyle(.white.opacity(0.9))
+                            .padding(10)
+                            .background(Circle().fill(.black.opacity(0.25)))
+                            .padding(10)
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// 四宫格装备卡：每部位一张（部位图标 + 词条或"未装备"）；
+/// 点按放大为 2.5D 卡牌（未装备不可放大）
 private struct EquippedGridCard: View {
     let item: DisplaySnapshot.EquippedDetail
+    var onTap: () -> Void = {}
 
     private var slotIcon: String {
         switch item.slot {
@@ -377,6 +518,9 @@ private struct EquippedGridCard: View {
         .padding(.vertical, 10)
         .background(Color(.secondarySystemGroupedBackground),
                     in: RoundedRectangle(cornerRadius: 14))
+        .contentShape(RoundedRectangle(cornerRadius: 14))
+        .onTapGesture(perform: onTap)
+        .opacity(item.isEmpty ? 0.8 : 1)
     }
 }
 
