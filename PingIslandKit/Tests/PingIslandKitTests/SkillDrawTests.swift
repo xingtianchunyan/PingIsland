@@ -49,4 +49,34 @@ final class SkillDrawTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - 骰点门槛（真机反馈第十八批）
+
+    func testOccursRequiresDiceTenOrAbove() {
+        for dice in 1..<SkillDrawRules.minimumDiceForDraw {
+            XCTAssertFalse(SkillDrawRules.occurs(characterSeed: 7, dice: dice,
+                                                 minuteIndex: 1, weekday: 2),
+                           "骰点 \(dice) 不应产生抽选")
+        }
+        // 骰 20 = 每分钟必中
+        for minute in 1...30 {
+            XCTAssertTrue(SkillDrawRules.occurs(characterSeed: 7, dice: 20,
+                                                minuteIndex: minute, weekday: 2))
+        }
+    }
+
+    func testOccursIsDeterministicAndDiceScaled() {
+        // 确定性
+        XCTAssertEqual(
+            SkillDrawRules.occurs(characterSeed: 7, dice: 13, minuteIndex: 5, weekday: 2),
+            SkillDrawRules.occurs(characterSeed: 7, dice: 13, minuteIndex: 5, weekday: 2))
+        // 概率随骰点递增：骰 20 命中数 ≥ 骰 12 命中数（同一分钟序列）
+        let dice20 = (1...200).filter {
+            SkillDrawRules.occurs(characterSeed: 7, dice: 20, minuteIndex: $0, weekday: 2) }.count
+        let dice12 = (1...200).filter {
+            SkillDrawRules.occurs(characterSeed: 7, dice: 12, minuteIndex: $0, weekday: 2) }.count
+        XCTAssertEqual(dice20, 200)
+        XCTAssertGreaterThanOrEqual(dice20, dice12)
+        XCTAssertGreaterThan(dice12, 0) // 骰 12 仍有机会命中
+    }
 }

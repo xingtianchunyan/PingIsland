@@ -165,7 +165,8 @@ public enum SettlementCoordinator {
             return DisplaySnapshot.EquippedDetail(
                 slot: slot.rawValue, isEmpty: false, rarity: item.rarity.rawValue,
                 appearance: EquipmentAppearance.appearanceType(finalWisdom: wisdom),
-                affixText: affixText, totalValue: item.totalValue)
+                affixText: affixText, totalValue: item.totalValue,
+                acquiredAt: item.acquiredAt, origin: item.origin)
         }
     }
 

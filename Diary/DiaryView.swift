@@ -413,6 +413,23 @@ private struct EquipmentHoloCard: View {
         }
     }
 
+    /// 部位主视觉：装备立绘（接 eq_部位_外观 美术资产；缺失时降级 SF Symbol）
+    @ViewBuilder
+    private var slotArt: some View {
+        if let key = CardArt.equipmentArtKey(slot: item.slot, appearance: item.appearance) {
+            Image(key)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(10)
+        } else {
+            Image(systemName: slotIcon)
+                .font(.system(size: 84, weight: .bold))
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.4), radius: 6, y: 3)
+        }
+    }
+
     /// 品阶 → 风味语
     private var flavorText: String {
         switch Rarity(rawValue: item.rarity) {
@@ -423,22 +440,26 @@ private struct EquipmentHoloCard: View {
         }
     }
 
+    /// 获得信息（第十八批）：装备卡上同步展示来源，过天后仍可追溯
+    private var originLine: String {
+        guard let at = item.acquiredAt else { return "" }
+        let when = at.formatted(date: .abbreviated, time: .shortened)
+        return "\n—— 获得于 \(when)\(item.origin.map { " · \($0)" } ?? "")"
+    }
+
     var body: some View {
         MTGCardView(
             name: "\(item.slot) · \(item.appearance)",
             costBadge: "\(item.totalValue)",
             typeLine: "装备 · \(rarityName)阶 · 评 \(item.totalValue)",
-            textBox: item.affixText + flavorText,
+            textBox: item.affixText + flavorText + originLine,
             foil: HoloFoil.equipment(rarity: item.rarity),
             rarityColor: rarityColor
         ) {
             ZStack {
                 LinearGradient(colors: [rarityColor.opacity(0.55), rarityColor.opacity(0.15)],
                                startPoint: .top, endPoint: .bottom)
-                Image(systemName: slotIcon)
-                    .font(.system(size: 84, weight: .bold))
-                    .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.4), radius: 6, y: 3)
+                slotArt
                 VStack {
                     Spacer()
                     HStack {
@@ -486,15 +507,24 @@ private struct EquippedGridCard: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Image(systemName: slotIcon)
-                .font(.title2)
-                .foregroundStyle(rarityColor)
-                .opacity(item.isEmpty ? 0.35 : 1)
-                .frame(width: 40, height: 40)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(rarityColor.opacity(item.isEmpty ? 0.05 : 0.14))
-                )
+            // 装备立绘（接美术资产；缺失降级 SF Symbol）
+            Group {
+                if let key = CardArt.equipmentArtKey(slot: item.slot, appearance: item.appearance) {
+                    Image(key)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                } else {
+                    Image(systemName: slotIcon)
+                        .font(.title2)
+                }
+            }
+            .foregroundStyle(rarityColor)
+            .opacity(item.isEmpty ? 0.35 : 1)
+            .frame(width: 40, height: 40)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(rarityColor.opacity(item.isEmpty ? 0.05 : 0.14))
+            )
             Text(item.slot)
                 .font(.caption2)
                 .foregroundStyle(.secondary)

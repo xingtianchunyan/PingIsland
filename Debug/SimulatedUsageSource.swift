@@ -13,12 +13,15 @@ public enum SimulatedUsageSource {
         JSONFileSettlementStore(directory: base.appendingPathComponent(directoryName, isDirectory: true))
     }
 
-    /// 模拟事件：stableEventID 带 sim. 前缀，与真实事件永不混淆
+    /// 模拟事件：stableEventID 带 sim. 前缀，与真实事件永不混淆。
+    /// diceOverride 仅调试指定骰点用（nil = 按运气正常掷骰）。
     public static func makeEvent(group: TrainingGroup, thresholdMinutes: Int,
-                                 localDate: String, confirmedAt: Date, sequence: Int) -> UsageEvent {
+                                 localDate: String, confirmedAt: Date, sequence: Int,
+                                 diceOverride: Int? = nil) -> UsageEvent {
         UsageEvent(stableEventID: "sim.\(localDate).\(group.rawValue).t\(thresholdMinutes).s\(sequence)",
                    group: group, thresholdMinutes: thresholdMinutes,
-                   localDate: localDate, confirmedAt: confirmedAt)
+                   localDate: localDate, confirmedAt: confirmedAt,
+                   diceOverride: diceOverride)
     }
 
     /// 清空模拟账本（独立目录整体删除，不触碰生产账本）

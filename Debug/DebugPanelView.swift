@@ -11,6 +11,11 @@ struct DebugPanelView: View {
     @State private var simGroup: TrainingGroup = .games
     @State private var simMinutes = 30
     @State private var simDayOffset = 0
+    /// 连注冲刺：连续 N 个模拟日、每天 480 分钟（快速拉高等级/触发高骰点条件）
+    @State private var streakDays = 3
+    /// 调试指定骰点（nil = 按运气正常掷骰）
+    @State private var diceOverrideOn = false
+    @State private var diceOverrideValue = 20
     @State private var simResult = ""
     @State private var statusLines: [String] = []
     @State private var recentEvents: [String] = []
@@ -43,7 +48,39 @@ struct DebugPanelView: View {
                     ForEach(GroupSelection.orderedGroups, id: \.self) { Text($0.rawValue).tag($0) }
                 }
                 Stepper("阈值分钟：\(simMinutes)", value: $simMinutes, in: 30...480, step: 30)
-                Button("注入模拟事件并结算") { injectSimulated(dayOffset: simDayOffset) }
+                // 快捷档位（第十八批）：常用阈值一键设置
+                HStack(spacing: 8) {
+                    ForEach([30, 60, 120, 240, 480], id: \.self) { value in
+                        Button("\(value)") { simMinutes = value }
+                            .font(.caption)
+                            .padding(.horizontal, 10).padding(.vertical, 5)
+                            .background(simMinutes == value ? .red.opacity(0.25) : Color(.secondarySystemGroupedBackground),
+                                        in: Capsule())
+                            .foregroundStyle(simMinutes == value ? .red : .secondary)
+                    }
+                }
+                Toggle("指定骰点（调试）", isOn: $diceOverrideOn)
+                if diceOverrideOn {
+                    Stepper("骰点：\(diceOverrideValue)", value: $diceOverrideValue, in: 1...20)
+                    Text("覆盖当日骰点：技能抽选门槛 ≥10；20 = 每分钟必掉且触发神谕")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                Button("注入模拟事件并结算") {
+                    injectSimulated(dayOffset: simDayOffset, minutes: simMinutes)
+                }
+                // 连注冲刺（第十八批）：一次把连续 N 个模拟日各注入 480 分钟，快速触达高等级/闪卡档位
+                HStack {
+                    Stepper("连注天数：\(streakDays)", value: $streakDays, in: 1...7)
+                }
+                Button("连注冲刺（每天 480 分钟，等级飙升）") {
+                    var summaries: [String] = []
+                    for i in 0..<streakDays {
+                        summaries.append(injectSimulated(dayOffset: simDayOffset + i,
+                                                         minutes: 480, quiet: true))
+                    }
+                    simResult = summaries.joined(separator: "\n") + "\n已同步展示快照"
+                    refresh()
+                }
                 Button("模拟过一天（不注入事件，仅切换日期）") {
                     simDayOffset += 1
                     SharedStore.defaults?.set(simDayOffset, forKey: SharedStore.Keys.simDayOffset)
@@ -186,13 +223,18 @@ struct DebugPanelView: View {
         refresh()
     }
 
-    private func injectSimulated(dayOffset: Int = 0) {
+    /// 注入一个模拟事件并结算；返回结果摘要（quiet = 连注冲刺用：不写 simResult、不 refresh）
+    @discardableResult
+    private func injectSimulated(dayOffset: Int = 0, minutes: Int? = nil,
+                                 quiet: Bool = false) -> String {
+        let minutes = minutes ?? simMinutes
         let base = SettlementCoordinator.store().directory.deletingLastPathComponent()
         do {
             let service = try SettlementService(store: SimulatedUsageSource.store(base: base),
                                                 groups: Array(TrainingGroup.allCases),
                                                 characterSeed: SimulatedUsageSource.seed)
-            // 结算时间取模拟日期的当前时刻：日记/装备获得时间与"今天"分区过滤保持一致
+            // 结算时间取模拟日期的当前时刻：日记/装备获得时间与"今天"分区过滤保持一致。
+            // 第十八批修复：此前误传真实 now，过天后（dayOffset>0）新获得装备永不落入"今日获得"。
             let cal = Calendar(identifier: .gregorian)
             let now = Date()
             let simDay = cal.date(byAdding: .day, value: dayOffset, to: now) ?? now
@@ -203,9 +245,10 @@ struct DebugPanelView: View {
                                        of: simDay) ?? simDay
             let localDate = simDate(dayOffset: dayOffset)
             let event = SimulatedUsageSource.makeEvent(
-                group: simGroup, thresholdMinutes: simMinutes,
-                localDate: localDate, confirmedAt: now,
-                sequence: SimulatedUsageSource.eventCount(base: base) + 1)
+                group: simGroup, thresholdMinutes: minutes,
+                localDate: localDate, confirmedAt: confirmedAt,
+                sequence: SimulatedUsageSource.eventCount(base: base) + 1,
+                diceOverride: diceOverrideOn ? diceOverrideValue : nil)
             let outcome = service.process(event)
             let dice = service.engine.segments[localDate]?.dice?.value ?? 0
             let newMinutes = (outcome == .duplicate) ? 0
@@ -213,17 +256,28 @@ struct DebugPanelView: View {
             var text = "【模拟数据】日期 \(localDate) · 新增入账 \(newMinutes) 分钟 · 骰点 \(dice)\n"
                 + "结算=\(outcome) 等级=\(service.engine.level) "
                 + "日记=\(service.engine.diary.count) 条 高水位=\(SimulatedUsageSource.eventCount(base: base))"
-            if case .settled(let delta) = outcome, delta.newMinutes == 0 {
-                text += "\n该事件无新增入账分钟（同组同日该阈值已入账，补差不倒退）。调高阈值或过天再注入。"
+            if case .settled(let delta) = outcome {
+                let newEquipment = delta.explorations.reduce(0) { $0 + $1.equipment.count }
+                if delta.explorations.count > 0 {
+                    text += "\n探索 \(delta.explorations.count) 次，新装备 \(newEquipment) 件"
+                }
+                if delta.newMinutes == 0 {
+                    text += "\n该事件无新增入账分钟（同组同日该阈值已入账，补差不倒退）。调高阈值或过天再注入。"
+                }
             }
             // 同步到展示链路：快照 → Widget / Live Activity，角色页/日记页立即可见
             SettlementCoordinator.syncDisplayFromSimulated(service.engine)
             WidgetCenter.shared.reloadAllTimelines()
-            text += "\n已同步展示快照并请求 Widget 刷新（当前 Widget 显示为模拟数据）"
-            simResult = text
-            refresh()
+            if !quiet {
+                text += "\n已同步展示快照并请求 Widget 刷新（当前 Widget 显示为模拟数据）"
+                simResult = text
+                refresh()
+            }
+            return text
         } catch {
-            simResult = "模拟结算失败：\(error.localizedDescription)"
+            let text = "模拟结算失败：\(error.localizedDescription)"
+            if !quiet { simResult = text; refresh() }
+            return text
         }
     }
 

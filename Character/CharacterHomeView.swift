@@ -1,9 +1,9 @@
 import PingIslandKit
 import SwiftUI
 
-/// 角色主页（执行文档 5.3-1，holo 升级）：
-/// 顶部 = 可小角度翻转的 2.5D 万智牌式角色卡（闪卡按等级；运气 ≥ 900 卡面下金雨），
-/// 其下 = 装备栏 · 特质栏双列，底部 = 六边形属性雷达。只读展示快照。
+/// 角色主页（执行文档 5.3-1，第十八批球星卡重构）：
+/// 中央 = 球星卡式角色卡（立绘 + 卡内六维雷达，闪卡按等级；运气 ≥ 900 卡面下金雨），
+/// 装备栏 · 特质栏左右浮在卡牌上方（z 轴叠放，半透明底保证可读）。只读展示快照。
 struct CharacterHomeView: View {
     @State private var snapshot: DisplaySnapshot = SnapshotIO.load() ?? DisplaySnapshot()
 
@@ -11,10 +11,7 @@ struct CharacterHomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 12) {
-                    CharacterHoloCard(snapshot: snapshot)
-                    heroRow
-                    Divider().opacity(0.4)
-                    AttributeRadarCard(attributes: snapshot.attributes ?? [:])
+                    cardSection
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 8)
@@ -29,28 +26,53 @@ struct CharacterHomeView: View {
         }
     }
 
-    // 装备栏 · 特质栏（原 heroRow 左右两栏保留）
-    private var heroRow: some View {
-        HStack(alignment: .center, spacing: 14) {
-            EquipmentColumn(details: snapshot.equippedDetail)
-            Spacer(minLength: 0)
-            TraitColumn(skills: snapshot.skills, todayDice: snapshot.todayDice)
+    /// 球星卡 + 浮层双栏：装备栏居左缘、特质栏居右缘，叠在卡牌上层
+    private var cardSection: some View {
+        ZStack(alignment: .top) {
+            CharacterSportsCard(snapshot: snapshot)
+                .frame(maxWidth: .infinity)
+            heroRow
+                .padding(.top, 14)
         }
-        .padding(.vertical, 4)
+    }
+
+    // 装备栏 · 特质栏（浮在卡牌上方的左右两列）
+    private var heroRow: some View {
+        HStack(alignment: .top, spacing: 0) {
+            floatingColumn { EquipmentColumn(details: snapshot.equippedDetail) }
+            Spacer(minLength: 0)
+            floatingColumn { TraitColumn(skills: snapshot.skills, todayDice: snapshot.todayDice) }
+        }
+    }
+
+    /// 浮层通用容器：细透明材质底 + 圆角，保证叠在卡面立绘上仍可读
+    private func floatingColumn<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .padding(6)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
     }
 }
 
-/// 2.5D 万智牌式角色卡（holo-card-studio 风格）：
-/// - 等级 <100 普通卡面；100~199 银边闪；200~399 金边闪；≥400 全彩闪
-/// - 运气 ≥ 900 时画框背景中持续下金色雨滴
+/// 球星卡式角色卡（第十八批重构，替代原万智牌式卡框）：
+/// - 立绘占卡面上半（接 class_* 美术资产；觉醒前用岛屿图标占位）
+/// - 六维雷达是卡面内容的一部分（立绘下方、卡内底部），不再置于卡牌之外
+/// - 等级 <100 普通卡面；100~199 银边闪；200~399 金边闪；≥400 全彩闪；运气 ≥900 金雨
 /// - 拖动卡面小角度翻转，松手回正
-private struct CharacterHoloCard: View {
+private struct CharacterSportsCard: View {
     let snapshot: DisplaySnapshot
 
     private var foil: HoloFoil { HoloFoil.character(level: snapshot.level) }
 
     private var luck: Int { snapshot.attributes?["LUK"] ?? 0 }
 
+    /// 职业立绘键（内容库 imageset 名）；未觉醒（觉醒中）用岛屿 App 图标占位
+    private var classArtKey: String? {
+        CardArt.classArtKey(className: snapshot.className)
+            ?? ContentLibrary.shared?.appIconKey
+    }
+
+    /// 觉醒前占位符号（立绘缺失时的兜底）
     private var classEmoji: String {
         switch snapshot.className {
         case "吟游诗人": return "🎵"
@@ -75,17 +97,7 @@ private struct CharacterHoloCard: View {
         }
     }
 
-    /// 画框主视觉渐变
-    private var artGradient: [Color] {
-        switch foil {
-        case .plain: return [.indigo.opacity(0.5), .teal.opacity(0.2)]
-        case .silverEdge: return [Color(white: 0.6).opacity(0.5), Color(white: 0.8).opacity(0.15)]
-        case .goldEdge: return [Color(red: 0.85, green: 0.65, blue: 0.2).opacity(0.5), .orange.opacity(0.15)]
-        case .rainbow: return [.purple.opacity(0.5), .pink.opacity(0.2), .teal.opacity(0.25)]
-        }
-    }
-
-    /// 文本框：最新日记 + 横幅 + 最近结算
+    /// 卡面风味行：最新日记 + 横幅 + 最近结算
     private var cardText: String {
         var lines: [String] = []
         if let latest = snapshot.diaryDetail?.first {
@@ -102,47 +114,138 @@ private struct CharacterHoloCard: View {
 
     var body: some View {
         HoloTilt {
-            MTGCardView(
-                name: snapshot.className,
-                costBadge: "\(snapshot.level)",
-                typeLine: "生物 · 修行者 · \(snapshot.fatigueText)",
-                textBox: cardText,
-                foil: foil,
-                goldRain: luck >= 900,
-                rarityColor: badgeColor
-            ) {
+            GeometryReader { geo in
+                let corner = geo.size.width * 0.05
                 ZStack {
-                    LinearGradient(colors: artGradient,
-                                   startPoint: .top, endPoint: .bottom)
-                    // 稀有装饰：高级闪卡画框加入光斑
-                    if foil == .rainbow {
-                        LinearGradient(colors: [.white.opacity(0.35), .clear, .yellow.opacity(0.25)],
-                                       startPoint: .topLeading, endPoint: .center)
+                    // 外框（卡牌黑边）
+                    RoundedRectangle(cornerRadius: corner)
+                        .fill(Color(white: 0.12))
+                    // 卡面（米白卡纸）
+                    RoundedRectangle(cornerRadius: corner * 0.8)
+                        .fill(Color(red: 0.95, green: 0.92, blue: 0.86))
+                        .padding(geo.size.width * 0.02)
+                    // 卡面内容
+                    VStack(spacing: geo.size.width * 0.025) {
+                        artWindow(width: geo.size.width)
+                        nameBar(width: geo.size.width)
+                        // 六维雷达：卡面内容的一部分（第十八批）
+                        RadarChart(values: radarValues, labels: radarKeys, maxValue: radarMax)
+                            .frame(height: geo.size.width * 0.52)
+                            .padding(.horizontal, geo.size.width * 0.06)
+                        Text(cardText)
+                            .font(.system(size: geo.size.width * 0.032, design: .serif))
+                            .foregroundStyle(.black.opacity(0.75))
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, geo.size.width * 0.06)
                     }
-                    Text(classEmoji)
-                        .font(.system(size: 84))
-                        .shadow(color: .black.opacity(0.35), radius: 5, y: 3)
-                    VStack {
-                        HStack {
-                            if luck >= 900 {
-                                Text("LUK \(luck)")
-                                    .font(.caption2.bold().monospacedDigit())
-                                    .foregroundStyle(Color(red: 0.75, green: 0.55, blue: 0.1))
-                                    .padding(.horizontal, 8).padding(.vertical, 3)
-                                    .background(Capsule().fill(.white.opacity(0.75)))
-                            }
-                            Spacer()
-                        }
-                        .padding(8)
-                        Spacer()
+                    .padding(.vertical, geo.size.width * 0.045)
+                    // 闪卡覆层：全彩 = 整面；银/金 = 边缘流光描边；普通 = 轻微高光
+                    if foil == .rainbow {
+                        FoilOverlay(foil: foil)
+                            .clipShape(RoundedRectangle(cornerRadius: corner * 0.8))
+                            .padding(geo.size.width * 0.02)
+                    } else if foil == .silverEdge {
+                        EdgeShimmerBorder(cornerRadius: corner * 0.8,
+                                          lineWidth: max(3, geo.size.width * 0.028),
+                                          colors: [Color(white: 0.85), .white, Color(white: 0.65),
+                                                   .white, Color(white: 0.9), .white])
+                            .padding(geo.size.width * 0.02)
+                    } else if foil == .goldEdge {
+                        EdgeShimmerBorder(cornerRadius: corner * 0.8,
+                                          lineWidth: max(3, geo.size.width * 0.028),
+                                          colors: [Color(red: 0.85, green: 0.65, blue: 0.2), .yellow,
+                                                   Color(red: 0.95, green: 0.85, blue: 0.4), .white,
+                                                   .yellow, Color(red: 0.8, green: 0.6, blue: 0.2)])
+                            .padding(geo.size.width * 0.02)
+                    } else {
+                        FoilOverlay(foil: .plain)
+                            .clipShape(RoundedRectangle(cornerRadius: corner * 0.8))
+                            .padding(geo.size.width * 0.02)
+                            .opacity(0.5)
                     }
                 }
             }
+            .aspectRatio(0.68, contentMode: .fit)
+            .frame(width: 320)
         }
-        .frame(width: 300)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("角色卡：\(snapshot.className)，等级\(snapshot.level)，\(snapshot.fatigueText)。拖动可翻转卡牌。")
     }
+
+    // MARK: - 卡面分区
+
+    /// 立绘区：职业立绘（接美术资产）+ 金雨 + LUK 徽章
+    private func artWindow(width: CGFloat) -> some View {
+        ZStack {
+            LinearGradient(colors: [.indigo.opacity(0.35), .teal.opacity(0.15)],
+                           startPoint: .top, endPoint: .bottom)
+            if let key = classArtKey {
+                Image(key)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .shadow(color: .black.opacity(0.3), radius: 6, y: 4)
+            } else {
+                Text(classEmoji)
+                    .font(.system(size: width * 0.3))
+                    .shadow(color: .black.opacity(0.35), radius: 5, y: 3)
+            }
+            if luck >= 900 {
+                GoldRain()
+            }
+            VStack {
+                HStack {
+                    if luck >= 900 {
+                        Text("LUK \(luck)")
+                            .font(.caption2.bold().monospacedDigit())
+                            .foregroundStyle(Color(red: 0.75, green: 0.55, blue: 0.1))
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Capsule().fill(.white.opacity(0.8)))
+                    }
+                    Spacer()
+                }
+                .padding(8)
+                Spacer()
+            }
+        }
+        .frame(height: width * 0.46)
+        .clipShape(RoundedRectangle(cornerRadius: width * 0.03))
+        .padding(.horizontal, geoWidthPadding(width))
+    }
+
+    private func geoWidthPadding(_ width: CGFloat) -> CGFloat { width * 0.045 }
+
+    /// 名字条：职业名 + 等级徽章 + 疲劳/状态
+    private func nameBar(width: CGFloat) -> some View {
+        HStack(alignment: .center, spacing: 6) {
+            Text(snapshot.className)
+                .font(.system(size: width * 0.055, weight: .bold, design: .serif))
+                .foregroundStyle(.black.opacity(0.85))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Spacer(minLength: 2)
+            Text("Lv.\(snapshot.level)")
+                .font(.system(size: width * 0.042, weight: .bold).monospacedDigit())
+                .foregroundStyle(.white)
+                .frame(width: width * 0.11, height: width * 0.11)
+                .background(Circle().fill(badgeColor))
+        }
+        .padding(.horizontal, width * 0.025)
+        .padding(.vertical, width * 0.008)
+        .background(Color(red: 0.98, green: 0.95, blue: 0.87),
+                    in: RoundedRectangle(cornerRadius: width * 0.02))
+        .padding(.horizontal, geoWidthPadding(width))
+    }
+
+    // MARK: - 雷达数据
+
+    private var radarKeys: [String] { Attribute.allCases.map(\.rawValue) }
+
+    private var radarValues: [Double] {
+        radarKeys.map { Double(snapshot.attributes?[$0] ?? 0) }
+    }
+
+    private var radarMax: Double { max(20, radarValues.max() ?? 20) }
 }
 
 /// 左栏：四部位装备（未装备灰显；点按无操作，纯展示）
@@ -276,38 +379,6 @@ private struct TraitColumn: View {
         case .orange: return .orange
         case .red: return .red
         default: return .gray
-        }
-    }
-}
-
-/// 六边形属性雷达（足球游戏式）：六轴 CON/INT/DEX/LUK/WIS/CHA，含网格环与数值顶点
-private struct AttributeRadarCard: View {
-    let attributes: [String: Int]
-
-    private let axisKeys = Attribute.allCases.map(\.rawValue) // [CON, INT, DEX, LUK, WIS, CHA]
-
-    private var values: [Double] {
-        axisKeys.map { Double(attributes[$0] ?? 0) }
-    }
-
-    private var maxValue: Double {
-        max(20, values.max() ?? 20)
-    }
-
-    var body: some View {
-        VStack(spacing: 10) {
-            Text("六维属性")
-                .font(.headline)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 4)
-            // 第十六批修复：雷达高度随可用宽度等比缩放（以小屏 390pt 为基准 190），
-            // 大小机型观感一致，不固定写死
-            GeometryReader { geo in
-                RadarChart(values: values, labels: axisKeys, maxValue: maxValue)
-                    .frame(height: min(230, max(140, geo.size.width * 0.5)))
-            }
-            .frame(height: 190) // GeometryReader 占位基准；内部实际高度随宽度
-            .padding(.horizontal, 8)
         }
     }
 }

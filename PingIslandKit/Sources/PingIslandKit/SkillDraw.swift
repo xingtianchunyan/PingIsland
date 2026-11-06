@@ -17,6 +17,22 @@ public struct SkillDraw: Equatable, Sendable {
 }
 
 public enum SkillDrawRules {
+    /// 骰点门槛（真机反馈第十八批）：骰点 < 10 的分钟不产生技能抽选；
+    /// ≥ 10 后每分钟按 (骰点 − 9)/11 的确定性概率命中（骰 20 = 每分钟必中）。
+    public static let minimumDiceForDraw = 10
+
+    /// 第 minuteIndex 分钟是否产生抽选：骰点门槛 + 确定性概率（同输入永远同结果）。
+    public static func occurs(characterSeed: UInt64, dice: Int,
+                              minuteIndex: Int, weekday: Int) -> Bool {
+        guard dice >= minimumDiceForDraw else { return false }
+        var rng = SeededRandom(seed: fnv1a64(
+            "skillhit|\(characterSeed)|\(dice)|\(minuteIndex)|\(weekday)"))
+        let chance = Double(dice - minimumDiceForDraw + 1)
+            / Double(21 - minimumDiceForDraw)
+        let roll = Double(rng.nextInt(upperBound: 1_000_000)) / 1_000_000.0
+        return roll < chance
+    }
+
     /// 第 minuteIndex 个有效分钟（1-based）的确定性抽选。
     /// 同一输入永远得到同一结果；不同分钟序号结果独立。
     public static func draw(characterSeed: UInt64, dice: Int,

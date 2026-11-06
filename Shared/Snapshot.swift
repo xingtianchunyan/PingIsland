@@ -101,6 +101,40 @@ public struct DisplaySnapshot: Codable, Equatable {
         /// 词条摘要（「CON +1、INT +2」）
         public var affixText: String
         public var totalValue: Int
+        /// 获得时间（"从何时获得"；装备卡展示来源用，第十八批）
+        public var acquiredAt: Date?
+        /// 获得原因（"因何事获得"）
+        public var origin: String?
+
+        public init(slot: String, isEmpty: Bool, rarity: Int, appearance: String,
+                    affixText: String, totalValue: Int,
+                    acquiredAt: Date? = nil, origin: String? = nil) {
+            self.slot = slot
+            self.isEmpty = isEmpty
+            self.rarity = rarity
+            self.appearance = appearance
+            self.affixText = affixText
+            self.totalValue = totalValue
+            self.acquiredAt = acquiredAt
+            self.origin = origin
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case slot, isEmpty, rarity, appearance, affixText, totalValue, acquiredAt, origin
+        }
+
+        /// 旧版本快照无 acquiredAt/origin 键：按 nil 兼容解码
+        public init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            slot = try c.decode(String.self, forKey: .slot)
+            isEmpty = try c.decode(Bool.self, forKey: .isEmpty)
+            rarity = try c.decode(Int.self, forKey: .rarity)
+            appearance = try c.decode(String.self, forKey: .appearance)
+            affixText = try c.decode(String.self, forKey: .affixText)
+            totalValue = try c.decode(Int.self, forKey: .totalValue)
+            acquiredAt = try c.decodeIfPresent(Date.self, forKey: .acquiredAt)
+            origin = try c.decodeIfPresent(String.self, forKey: .origin)
+        }
     }
 
     /// 角色页技能条目（skillCollection 项）

@@ -1,6 +1,30 @@
 import PingIslandKit
 import SwiftUI
 
+// MARK: - 美术资产键解析（内容库 → Imageset）
+
+/// 卡面立绘键统一入口：内容库缺失时全部返回 nil，调用方自行降级（emoji / SF Symbol）。
+enum CardArt {
+    /// 职业立绘键；未觉醒（className 无法映射职业）返回 nil（调用方可用 appIconKey 占位）
+    static func classArtKey(className: String) -> String? {
+        guard let cls = CharacterClass(rawValue: className) else { return nil }
+        return ContentLibrary.shared?.classArt(cls)
+    }
+
+    /// 装备立绘键：部位中文 + 外观类型中文 → 内容库 imageset 名
+    static func equipmentArtKey(slot: String, appearance: String) -> String? {
+        guard let slot = EquipmentSlot(rawValue: slot) else { return nil }
+        let tier: AppearanceTier
+        switch appearance {
+        case "皮甲": tier = .leather
+        case "铁甲": tier = .iron
+        case "机甲": tier = .mech
+        default: tier = .cloth
+        }
+        return ContentLibrary.shared?.equipmentIcon(slot: slot, tier: tier)
+    }
+}
+
 // MARK: - 闪卡档位（holo-card-studio 风格 → SwiftUI 移植）
 
 /// 闪卡效果档位：
@@ -135,6 +159,32 @@ struct FoilOverlay: View {
     }
 }
 
+// MARK: - 边缘流光描边（银/金闪卡）
+
+/// 银/金边闪卡的边框流光：动画渐变沿边框循环扫动。
+/// 用 strokeBorder（描边全部落在形内）保证边框全覆盖——
+/// 旧版 mask+stroke 方案描边一半悬在卡外被裁，只剩未覆盖的白边（第十八批修复）。
+struct EdgeShimmerBorder: View {
+    let cornerRadius: CGFloat
+    let lineWidth: CGFloat
+    let colors: [Color]
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+            let phase = timeline.date.timeIntervalSinceReferenceDate
+                .truncatingRemainder(dividingBy: 3.6) / 3.6
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .strokeBorder(
+                    LinearGradient(colors: colors,
+                                   startPoint: UnitPoint(x: phase * 2 - 1, y: -0.2),
+                                   endPoint: UnitPoint(x: phase * 2, y: 1.2)),
+                    lineWidth: lineWidth)
+                .blendMode(.plusLighter)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
 // MARK: - 金色雨滴（运气 ≥ 900）
 
 /// 卡面背景中持续飘落的金色雨滴（Canvas + TimelineView，低开销、无状态）。
@@ -211,15 +261,24 @@ struct MTGCardView<Art: View>: View {
                     textBoxView(width: geo.size.width)
                 }
                 .padding(geo.size.width * 0.045)
-                // 闪卡覆层：银/金边 = 仅描边；全彩 = 整面
+                // 闪卡覆层：全彩 = 整面；银/金边 = 边缘流光描边（全覆盖）；普通 = 轻微高光
                 if foil == .rainbow {
                     FoilOverlay(foil: foil)
                         .clipShape(RoundedRectangle(cornerRadius: corner * 0.9))
                         .padding(geo.size.width * 0.008)
-                } else if foil != .plain {
-                    FoilOverlay(foil: foil)
-                        .mask(RoundedRectangle(cornerRadius: corner)
-                            .stroke(lineWidth: geo.size.width * 0.026))
+                } else if foil == .silverEdge {
+                    EdgeShimmerBorder(cornerRadius: corner * 0.9,
+                                      lineWidth: max(3, geo.size.width * 0.03),
+                                      colors: [Color(white: 0.85), .white, Color(white: 0.65),
+                                               .white, Color(white: 0.9), .white, Color(white: 0.75)])
+                        .padding(geo.size.width * 0.008)
+                } else if foil == .goldEdge {
+                    EdgeShimmerBorder(cornerRadius: corner * 0.9,
+                                      lineWidth: max(3, geo.size.width * 0.03),
+                                      colors: [Color(red: 0.72, green: 0.55, blue: 0.2), .yellow,
+                                               Color(red: 0.85, green: 0.68, blue: 0.3), .white,
+                                               .yellow, Color(red: 0.75, green: 0.6, blue: 0.25), .yellow])
+                        .padding(geo.size.width * 0.008)
                 } else {
                     // 普通卡：轻微高光
                     FoilOverlay(foil: .plain)

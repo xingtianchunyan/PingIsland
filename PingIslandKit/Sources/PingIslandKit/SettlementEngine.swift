@@ -9,14 +9,34 @@ public struct UsageEvent: Equatable, Codable, Sendable {
     public var thresholdMinutes: Int
     public var localDate: String
     public var confirmedAt: Date
+    /// 调试专用（仅模拟事件使用）：直接指定当日骰点，跳过运气掷骰；
+    /// 生产 DeviceActivity 事件必须为 nil。取值钳制到 [1, 20]。
+    public var diceOverride: Int?
 
     public init(stableEventID: String, group: TrainingGroup,
-                thresholdMinutes: Int, localDate: String, confirmedAt: Date) {
+                thresholdMinutes: Int, localDate: String, confirmedAt: Date,
+                diceOverride: Int? = nil) {
         self.stableEventID = stableEventID
         self.group = group
         self.thresholdMinutes = thresholdMinutes
         self.localDate = localDate
         self.confirmedAt = confirmedAt
+        self.diceOverride = diceOverride
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case stableEventID, group, thresholdMinutes, localDate, confirmedAt, diceOverride
+    }
+
+    /// 旧版本账本日志无 diceOverride 键：按 nil 兼容解码
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        stableEventID = try c.decode(String.self, forKey: .stableEventID)
+        group = try c.decode(TrainingGroup.self, forKey: .group)
+        thresholdMinutes = try c.decode(Int.self, forKey: .thresholdMinutes)
+        localDate = try c.decode(String.self, forKey: .localDate)
+        confirmedAt = try c.decode(Date.self, forKey: .confirmedAt)
+        diceOverride = try c.decodeIfPresent(Int.self, forKey: .diceOverride)
     }
 }
 
@@ -136,6 +156,10 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
             ?? GameDaySegment(segmentID: Int64(segments.count + 1),
                               localDate: event.localDate, timeZoneID: "local")
         var diceRng = SeededRandom(seed: diceSeed(for: event.localDate))
+        // 调试专用：模拟事件可指定骰点（钳制 [1,20]），生产事件恒为 nil 走正常掷骰
+        if let override = event.diceOverride {
+            segment.dice = DailyDice(value: min(20, max(1, override)))
+        }
         let luckSnapshot = finalAttributes()[.luk, default: 1]
         let dice = segment.ensureDice(luckSnapshot: luckSnapshot, rng: &diceRng).value
 
@@ -179,13 +203,17 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
             dayStats[event.localDate] = ds
         }
 
-        // 5.5 技能抽选：每个有效分钟一次逻辑抽选（9.6），按（种子、骰点、分钟序号、星期）确定性
+        // 5.5 技能抽选（9.6，真机反馈第十八批修订）：骰点 ≥ 10 的分钟才有确定性命中机会，
+        // 每分钟独立判定（种子/骰点/分钟序号/星期），未命中分钟不进收藏也不进 delta
         if newMinutes > 0 {
             let weekday = SkillDrawRules.weekday(forLocalDate: event.localDate)
             for i in 0..<newMinutes {
+                let minuteIndex = applied + i + 1
+                guard SkillDrawRules.occurs(characterSeed: characterSeed, dice: dice,
+                                            minuteIndex: minuteIndex, weekday: weekday) else { continue }
                 let draw = SkillDrawRules.draw(
                     characterSeed: characterSeed, dice: dice,
-                    minuteIndex: applied + i + 1, weekday: weekday)
+                    minuteIndex: minuteIndex, weekday: weekday)
                 skillCollection.add(draw)
                 delta.skillDraws.append(draw)
             }
