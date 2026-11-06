@@ -1,0 +1,15 @@
+# Dependabot：GitHub Actions 版本自动更新
+# 官方 action 大版本升级（如 Node 运行时弃用）会自动开 PR，避免再次堆积弃用警告
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "ci"
