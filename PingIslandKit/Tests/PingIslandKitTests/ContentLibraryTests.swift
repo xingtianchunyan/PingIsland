@@ -81,8 +81,8 @@ final class ContentLibraryTests: XCTestCase {
                        ["drowsy", "fresh", "leaning", "sleeping", "tired"])
         XCTAssertEqual(library.monsterArtKeys.keys.sorted(),
                        ["cinder_bat", "goblin", "mushroom", "rock_crab",
-                        "rust_puppet", "salamander", "skeleton", "slime",
-                        "sapling", "static_orb", "thunder_fledgling", "water_wisp"])
+                        "rust_puppet", "salamander", "sapling", "skeleton",
+                        "slime", "static_orb", "thunder_fledgling", "water_wisp"])
     }
 
     func testSharedIsValid() {
