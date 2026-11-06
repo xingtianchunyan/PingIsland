@@ -192,11 +192,14 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
         // 调试专用：模拟事件可指定骰点（钳制 [1,20]），生产事件恒为 nil 走正常掷骰
         if let override = event.diceOverride {
             segment.dice = DailyDice(value: min(20, max(1, override)))
+            segments[event.localDate] = segment
         }
-        segments[event.localDate] = segment
         // 4. 一天开始：建立骰点 + 骰 20 发放每日一次的神谕（换日即触发，不占活动结算次数）
         delta.oracleIssued = startDay(event.localDate, recordedAt: event.confirmedAt)
-        let dice = segments[event.localDate]?.dice?.value ?? 10
+        // startDay 已把骰点/神谕标记写回 segments；此处必须重读——
+        // 若沿用第 3 步的旧副本，文末写回会覆盖掉骰点（nil）与神谕标记（重复发放）
+        segment = segments[event.localDate] ?? segment
+        let dice = segment.dice?.value ?? 10
 
         // 5. 每分钟成长（真机反馈第十九批规则 v2）：固定 1 XP/分钟，不结算其它内容
         var dayMilli: Int64 = 0
