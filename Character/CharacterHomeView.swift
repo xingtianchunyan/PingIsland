@@ -258,7 +258,9 @@ private struct TraitColumn: View {
                     .multilineTextAlignment(.center)
             }
         }
-        .frame(width: 56)
+        // 第十六批修复：高度固定为「骰点 + 6 技能」满编布局（7×49 + 6×12 间距），
+        // 内容不足时空槽留白——页面总高度不再随技能数变化，雷达位置稳定不跳动
+        .frame(width: 56, height: 415, alignment: .top)
     }
 
     private func rarityColor(_ rarity: Int) -> Color {
@@ -293,9 +295,14 @@ private struct AttributeRadarCard: View {
                 .font(.headline)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 4)
-            RadarChart(values: values, labels: axisKeys, maxValue: maxValue)
-                .frame(height: 190)
-                .padding(.horizontal, 8)
+            // 第十六批修复：雷达高度随可用宽度等比缩放（以小屏 390pt 为基准 190），
+            // 大小机型观感一致，不固定写死
+            GeometryReader { geo in
+                RadarChart(values: values, labels: axisKeys, maxValue: maxValue)
+                    .frame(height: min(230, max(140, geo.size.width * 0.5)))
+            }
+            .frame(height: 190) // GeometryReader 占位基准；内部实际高度随宽度
+            .padding(.horizontal, 8)
         }
     }
 }

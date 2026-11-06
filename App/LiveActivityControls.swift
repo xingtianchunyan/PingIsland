@@ -4,6 +4,8 @@ import SwiftUI
 /// Live Activity 便捷控制（执行文档 11.3：首开可创建一次）
 struct LiveActivityControls: View {
     @State private var message = ""
+    /// 预检被拒（用户在锁屏选了"不允许"后系统会关闭实时活动开关）时显示设置快捷入口
+    @State private var showSettingsLink = false
     /// 防重入（第十五次真机修复）：结束/创建活动是一个异步序列，执行期间禁用按钮。
     /// 连续点击会产生互相残杀的并发任务——后一个 Task 的"结束全部"会把前一个 Task
     /// 刚创建的活动一并杀掉，表现为灵动岛/锁屏内容快速闪烁、活动净存活为零、
@@ -20,6 +22,14 @@ struct LiveActivityControls: View {
             if !message.isEmpty {
                 Text(message).font(.caption).foregroundStyle(.secondary)
             }
+            if showSettingsLink {
+                Button("去设置中开启实时活动") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                .font(.caption)
+            }
         }
         .font(.subheadline)
     }
@@ -28,10 +38,12 @@ struct LiveActivityControls: View {
         guard !busy else { return }
         // 权限预检：被拒时给出确切设置路径，不再静默失败
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
-            message = "系统未允许实时活动：设置→屏之岛→实时活动 打开；另检查 设置→面容ID与密码→锁定时允许访问→实时活动。"
+            message = "系统已关闭本 App 的实时活动（在锁屏选过\"不允许\"会触发此状态）。"
+            showSettingsLink = true
             LiveActivityDiagnostics.record("开启：预检被拒（areActivitiesEnabled=false）")
             return
         }
+        showSettingsLink = false
         busy = true
         // 11.3：同一时刻只保留一个活动。
         // 注意：结束旧活动与创建新活动必须在同一异步序列里——若用独立 Task 先结束后创建，
@@ -68,7 +80,9 @@ struct LiveActivityControls: View {
                 await activity.end(dismissalPolicy: .immediate)
             }
             let remaining = Activity<PingIslandActivityAttributes>.activities.count
-            message = remaining == 0 ? "已结束" : "仍有 \(remaining) 个活动未能结束"
+            // 第十六批：remaining > 0 通常是旧安装（重新签名后）遗留的孤儿活动——
+            // 新安装无法枚举/结束旧签名的活动，只能等 8 小时过期或重启手机清除
+            message = remaining == 0 ? "已结束" : "仍有 \(remaining) 个活动未能结束（多为旧安装遗留，重启手机可清除）"
             LiveActivityDiagnostics.record("结束：剩余 \(remaining) 个")
         }
     }
