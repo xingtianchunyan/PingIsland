@@ -94,7 +94,9 @@ public enum MilestoneRules {
             grant.attributePoints[pickAttribute(RulesConfig.oraclePackAttributes)] = points
         }
 
-        let roll01 = { Double(rng.nextInt(upperBound: 1_000_000)) / 1_000_000.0 }
+        func roll01() -> Double {
+            Double(rng.nextInt(upperBound: 1_000_000)) / 1_000_000.0
+        }
 
         if dice < 10 {
             if roll01() < Double(dice) / 10.0 {
