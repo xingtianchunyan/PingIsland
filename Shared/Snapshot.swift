@@ -177,6 +177,7 @@ public struct DisplaySnapshot: Codable, Equatable {
                 recentDiaries: [String]? = nil, collection: [String]? = nil,
                 collectionDetail: [CollectionDetail]? = nil,
                 diaryDetail: [DiaryDetail]? = nil, weekStats: WeekStats? = nil,
+                previousWeekStats: WeekStats? = nil,
                 equippedDetail: [EquippedDetail]? = nil, skills: [SkillDetail]? = nil,
                 todayDice: Int? = nil, dayOffset: Int = 0) {
         self.level = level
@@ -193,6 +194,7 @@ public struct DisplaySnapshot: Codable, Equatable {
         self.collectionDetail = collectionDetail
         self.diaryDetail = diaryDetail
         self.weekStats = weekStats
+        self.previousWeekStats = previousWeekStats
         self.equippedDetail = equippedDetail
         self.skills = skills
         self.todayDice = todayDice
@@ -204,6 +206,7 @@ public struct DisplaySnapshot: Codable, Equatable {
         case level, className, fatigueStage, recentEvent, lastSettlementAt
         case snapshotVersion, displayPriority, bannerText, attributes, equipment
         case recentDiaries, collection, collectionDetail, diaryDetail, weekStats
+        case previousWeekStats
         case equippedDetail, skills, todayDice, dayOffset
     }
 
@@ -225,6 +228,7 @@ public struct DisplaySnapshot: Codable, Equatable {
         collectionDetail = try c.decodeIfPresent([CollectionDetail].self, forKey: .collectionDetail)
         diaryDetail = try c.decodeIfPresent([DiaryDetail].self, forKey: .diaryDetail)
         weekStats = try c.decodeIfPresent(WeekStats.self, forKey: .weekStats)
+        previousWeekStats = try c.decodeIfPresent(WeekStats.self, forKey: .previousWeekStats)
         equippedDetail = try c.decodeIfPresent([EquippedDetail].self, forKey: .equippedDetail)
         skills = try c.decodeIfPresent([SkillDetail].self, forKey: .skills)
         todayDice = try c.decodeIfPresent(Int.self, forKey: .todayDice)
