@@ -100,6 +100,17 @@ public enum SettlementCoordinator {
                 entryType: entry.entryType.rawValue,
                 group: entry.group.rawValue)
         }
+        let recentTexts: [String] = engine.diary.suffix(30).reversed().map { entry in
+            let reward = entry.rewardSummary.isEmpty ? "" : " · \(entry.rewardSummary)"
+            return "\(shortTimestamp(entry.recordedAt)) · \(DiaryText.display(entry.textKey))\(reward)"
+        }
+        let fatigueStageRaw = FatigueRules.stage(
+            confirmedMinutesTotal: engine.confirmedMinutes(on: today)).rawValue
+        let recentEventText = recent
+            .map { "日记：\((DiaryText.display($0.textKey)))（\($0.rewardSummary)）" } ?? "等待第一次结算"
+        let snapshotVersion = (SnapshotIO.load()?.snapshotVersion ?? 0) + 1
+        let banner = PresentationPolicy.banner(for: priority, input: priorityInput)
+        let todayDiceValue = engine.segments[today]?.dice?.value ?? engine.previewDice(for: today)
         let skillDetails: [DisplaySnapshot.SkillDetail] = engine.skillCollection.items
             .sorted { ($0.rarity != $1.rarity) ? $0.rarity > $1.rarity : $0.level > $1.level }
             .prefix(6)
@@ -108,19 +119,16 @@ public enum SettlementCoordinator {
         let snapshot = DisplaySnapshot(
             level: Int(engine.level),
             className: engine.classState?.rawValue ?? "觉醒中",
-            fatigueStage: FatigueRules.stage(confirmedMinutesTotal: engine.confirmedMinutes(on: today)).rawValue,
-            recentEvent: recent.map { "日记：\(DiaryText.display($0.textKey))（\($0.rewardSummary)）" } ?? "等待第一次结算",
+            fatigueStage: fatigueStageRaw,
+            recentEvent: recentEventText,
             lastSettlementAt: recent?.recordedAt ?? Date(),
-            snapshotVersion: (SnapshotIO.load()?.snapshotVersion ?? 0) + 1,
+            snapshotVersion: snapshotVersion,
             displayPriority: priority.rawValue,
-            bannerText: PresentationPolicy.banner(for: priority, input: priorityInput),
+            bannerText: banner,
             // 展示最终属性（含已装备词条加成），否则角色面板与装备栏对不上
             attributes: attributesDict,
             equipment: equipmentSummaryTexts,
-            recentDiaries: engine.diary.suffix(30).reversed().map { entry in
-                let reward = entry.rewardSummary.isEmpty ? "" : " · \(entry.rewardSummary)"
-                return "\(shortTimestamp(entry.recordedAt)) · \(DiaryText.display(entry.textKey))\(reward)"
-            },
+            recentDiaries: recentTexts,
             collection: collectionTexts,
             collectionDetail: collectionDetails,
             diaryDetail: diaryDetails,
@@ -128,7 +136,7 @@ public enum SettlementCoordinator {
             previousWeekStats: makeWeekStats(from: engine, around: previousAnchor),
             equippedDetail: equippedDetail(from: engine),
             skills: skillDetails,
-            todayDice: engine.segments[today]?.dice?.value ?? engine.previewDice(for: today),
+            todayDice: todayDiceValue,
             dayOffset: dayOffset
         )
         SnapshotIO.save(snapshot)
