@@ -23,9 +23,9 @@ final class SettlementEngineTests: XCTestCase {
             XCTAssertEqual(delta.milestoneGrants.count, 1) // 每满 30 分钟一次活动
         }
         // 规则 v3 成长：90 分钟 × 骰点/10（neutral 职业系数）+ 3 次活动 × 3×骰点 XP
-        // 分钟部分 milli = 90×D×10；活动部分 milli = 3×(3D)×100；合计 1800×D
+        // 分钟部分 milli = 90×D×100；活动部分 milli = 3×(3D)×1000；合计 18000×D
         let dice = Int64(e.segments[day]!.dice!.value)
-        XCTAssertEqual(e.growth.totalMilli, 1800 * dice)
+        XCTAssertEqual(e.growth.totalMilli, 18000 * dice)
     }
 
     // MARK: 2. 重复事件不重复发奖（14.1-6）
@@ -49,7 +49,7 @@ final class SettlementEngineTests: XCTestCase {
         guard case .settled(let delta) = outcome else { return XCTFail() }
         XCTAssertEqual(delta.newMinutes, 0) // 已入账 90，不重复补
         let dice = Int64(a.segments[day]!.dice!.value)
-        XCTAssertEqual(a.growth.totalMilli, 1800 * dice)
+        XCTAssertEqual(a.growth.totalMilli, 18000 * dice)
     }
 
     // MARK: 4. 批量 = 逐条（14.1-7）
@@ -144,8 +144,9 @@ final class SettlementEngineTests: XCTestCase {
                             localDate: "2026-11-09", confirmedAt: settleTime,
                             diceOverride: 10)
         guard case .settled(let delta) = e.process(ev) else { return XCTFail() }
-        // 分钟部分 milli = newMinutes×10×110×10/100 = newMinutes×110；活动加成 30 XP = 3000 milli
-        XCTAssertEqual(delta.growthMilliApplied, Int64(delta.newMinutes) * 110 + 3000)
+        // 分钟部分 milli = newMinutes×10×110×10×10/100 = newMinutes×1100（骰 10 × matched 1.10）
+        // 活动加成 30 XP = 30000 milli（1 XP = 1000 milli）
+        XCTAssertEqual(delta.growthMilliApplied, Int64(delta.newMinutes) * 1100 + 30000)
         XCTAssertGreaterThan(e.growth.totalMilli, before)
     }
 

@@ -54,8 +54,12 @@ final class SkillEngineIntegrationTests: XCTestCase {
         for grant in grants {
             XCTAssertEqual(grant.experienceXP, 60) // 3 × 20
             XCTAssertNotNil(grant.extraEquipment, "骰 20 每次活动必得一件额外装备")
-            // 主结果：要么第二件装备，要么一件技能（总产出恰为 2 项）
-            XCTAssertEqual(grant.allEquipment.count + (grant.mainSkill == nil ? 0 : 1), 2)
+            // 规则 v3 主结果三选一（属性/装备/技能），与必得额外装备合计恰为 2 项产出
+            let mainCount = (grant.mainEquipment == nil ? 0 : 1)
+                + (grant.mainSkill == nil ? 0 : 1)
+                + (grant.attributePoints.isEmpty ? 0 : 1)
+            XCTAssertEqual(mainCount, 1)
+            XCTAssertEqual(grant.allEquipment.count, (grant.mainEquipment == nil ? 0 : 1) + 1)
             for item in grant.allEquipment {
                 XCTAssertTrue([.purple, .orange, .red].contains(item.rarity))
             }

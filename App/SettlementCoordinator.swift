@@ -64,6 +64,9 @@ public enum SettlementCoordinator {
             isNight: PresentationPolicy.isNight(Date()))
         let priority = PresentationPolicy.resolve(priorityInput)
         let recent = engine.diary.last
+        // 上周锚点（第二十批：日记页本周/上周切换）
+        let previousAnchor = Calendar.current.date(byAdding: .day, value: -7,
+                                                   to: effectiveToday) ?? effectiveToday
         let snapshot = DisplaySnapshot(
             level: Int(engine.level),
             className: engine.classState?.rawValue ?? "觉醒中",
@@ -112,9 +115,7 @@ public enum SettlementCoordinator {
                     group: entry.group.rawValue)
             },
             weekStats: makeWeekStats(from: engine, around: effectiveToday),
-            previousWeekStats: makeWeekStats(
-                from: engine,
-                around: calendar.date(byAdding: .day, value: -7, to: effectiveToday) ?? effectiveToday),
+            previousWeekStats: makeWeekStats(from: engine, around: previousAnchor),
             equippedDetail: equippedDetail(from: engine),
             skills: engine.skillCollection.items
                 .sorted { ($0.rarity != $1.rarity) ? $0.rarity > $1.rarity : $0.level > $1.level }

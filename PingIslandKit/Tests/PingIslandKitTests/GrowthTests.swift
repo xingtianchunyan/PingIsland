@@ -96,8 +96,9 @@ final class WisdomGrowthEngineTests: XCTestCase {
         let wisAfterFirst = engine.baseAttributes[.wis] ?? 0
         engine.process(UsageEvent(stableEventID: "w3", group: .games, thresholdMinutes: 60,
                                   localDate: "2026-11-02", confirmedAt: settleTime))
-        // 不变式（v1.1）：任意时刻 WIS = 初始智慧 +（等级 − 1）
-        XCTAssertEqual(engine.baseAttributes[.wis], initialWis + Int(engine.level - 1))
+        // 不变式（v1.1 + 第二十批 v3）：WIS = 初始 +（等级 − 1）+ 活动掉落的高级属性；
+        // 里程碑可能直接加 WIS（LUK/WIS/CHA 池），故取 ≥，且不低于上次结算后
+        XCTAssertGreaterThanOrEqual(engine.baseAttributes[.wis] ?? 0, initialWis + Int(engine.level - 1))
         XCTAssertGreaterThanOrEqual(engine.baseAttributes[.wis] ?? 0, wisAfterFirst)
     }
 }
