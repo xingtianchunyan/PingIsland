@@ -67,6 +67,44 @@ public enum SettlementCoordinator {
         // 上周锚点（第二十批：日记页本周/上周切换）
         let previousAnchor = Calendar.current.date(byAdding: .day, value: -7,
                                                    to: effectiveToday) ?? effectiveToday
+        // 复杂子表达式先算成局部常量，避免巨型字面量类型检查超时
+        let finalAttrs = engine.finalAttributes()
+        let attributesDict: [String: Int] = finalAttrs.reduce(into: [String: Int]()) {
+            $0[$1.key.rawValue] = $1.value
+        }
+        let equipmentSummaryTexts: [String] = engine.equipped
+            .sorted { $0.key.rawValue < $1.key.rawValue }
+            .map { _, item in SnapshotPresentation.equipmentSummary(item) }
+        let sortedEquipment = engine.equipment
+            .sorted { ($0.rarity != $1.rarity) ? $0.rarity > $1.rarity : $0.id < $1.id }
+        let collectionTexts: [String] = sortedEquipment.map { item in
+            let worn = item.isEquipped ? " · 装备中" : ""
+            return SnapshotPresentation.equipmentSummary(item) + worn
+        }
+        let collectionDetails: [DisplaySnapshot.CollectionDetail] = sortedEquipment.map { item in
+            DisplaySnapshot.CollectionDetail(
+                text: SnapshotPresentation.equipmentSummaryWithoutRarity(item),
+                rarity: item.rarity.rawValue,
+                isEquipped: item.isEquipped,
+                acquiredAt: item.acquiredAt,
+                origin: item.origin,
+                appearance: item.appearanceOverride
+                    ?? EquipmentAppearance.appearanceType(
+                        finalWisdom: finalAttrs[.wis, default: 0]))
+        }
+        let diaryDetails: [DisplaySnapshot.DiaryDetail] = engine.diary.reversed().map { entry in
+            DisplaySnapshot.DiaryDetail(
+                recordedAt: entry.recordedAt,
+                text: DiaryText.display(entry.textKey),
+                rewardSummary: entry.rewardSummary,
+                entryType: entry.entryType.rawValue,
+                group: entry.group.rawValue)
+        }
+        let skillDetails: [DisplaySnapshot.SkillDetail] = engine.skillCollection.items
+            .sorted { ($0.rarity != $1.rarity) ? $0.rarity > $1.rarity : $0.level > $1.level }
+            .prefix(6)
+            .map { DisplaySnapshot.SkillDetail(weekday: $0.weekday, isActive: $0.isActive,
+                                               rarity: $0.rarity.rawValue, level: $0.level) }
         let snapshot = DisplaySnapshot(
             level: Int(engine.level),
             className: engine.classState?.rawValue ?? "觉醒中",
@@ -77,51 +115,19 @@ public enum SettlementCoordinator {
             displayPriority: priority.rawValue,
             bannerText: PresentationPolicy.banner(for: priority, input: priorityInput),
             // 展示最终属性（含已装备词条加成），否则角色面板与装备栏对不上
-            attributes: engine.finalAttributes().reduce(into: [String: Int]()) {
-                $0[$1.key.rawValue] = $1.value
-            },
-            equipment: engine.equipped
-                .sorted { $0.key.rawValue < $1.key.rawValue }
-                .map { _, item in SnapshotPresentation.equipmentSummary(item) },
+            attributes: attributesDict,
+            equipment: equipmentSummaryTexts,
             recentDiaries: engine.diary.suffix(30).reversed().map { entry in
                 let reward = entry.rewardSummary.isEmpty ? "" : " · \(entry.rewardSummary)"
                 return "\(shortTimestamp(entry.recordedAt)) · \(DiaryText.display(entry.textKey))\(reward)"
             },
-            collection: engine.equipment
-                .sorted { ($0.rarity != $1.rarity) ? $0.rarity > $1.rarity : $0.id < $1.id }
-                .map { item in
-                    let worn = item.isEquipped ? " · 装备中" : ""
-                    return SnapshotPresentation.equipmentSummary(item) + worn
-                },
-            collectionDetail: engine.equipment
-                .sorted { ($0.rarity != $1.rarity) ? $0.rarity > $1.rarity : $0.id < $1.id }
-                .map { item in
-                    DisplaySnapshot.CollectionDetail(
-                        text: SnapshotPresentation.equipmentSummaryWithoutRarity(item),
-                        rarity: item.rarity.rawValue,
-                        isEquipped: item.isEquipped,
-                        acquiredAt: item.acquiredAt,
-                        origin: item.origin,
-                        appearance: item.appearanceOverride
-                            ?? EquipmentAppearance.appearanceType(
-                                finalWisdom: engine.finalAttributes()[.wis, default: 0]))
-                },
-            diaryDetail: engine.diary.reversed().map { entry in
-                DisplaySnapshot.DiaryDetail(
-                    recordedAt: entry.recordedAt,
-                    text: DiaryText.display(entry.textKey),
-                    rewardSummary: entry.rewardSummary,
-                    entryType: entry.entryType.rawValue,
-                    group: entry.group.rawValue)
-            },
+            collection: collectionTexts,
+            collectionDetail: collectionDetails,
+            diaryDetail: diaryDetails,
             weekStats: makeWeekStats(from: engine, around: effectiveToday),
             previousWeekStats: makeWeekStats(from: engine, around: previousAnchor),
             equippedDetail: equippedDetail(from: engine),
-            skills: engine.skillCollection.items
-                .sorted { ($0.rarity != $1.rarity) ? $0.rarity > $1.rarity : $0.level > $1.level }
-                .prefix(6)
-                .map { DisplaySnapshot.SkillDetail(weekday: $0.weekday, isActive: $0.isActive,
-                                                   rarity: $0.rarity.rawValue, level: $0.level) },
+            skills: skillDetails,
             todayDice: engine.segments[today]?.dice?.value ?? engine.previewDice(for: today),
             dayOffset: dayOffset
         )
