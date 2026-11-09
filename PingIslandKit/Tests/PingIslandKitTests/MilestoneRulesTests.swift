@@ -81,7 +81,7 @@ final class MilestoneRulesTests: XCTestCase {
         XCTAssertEqual(ratio(green, of: equipment.count), 0.30, accuracy: 0.02)
         XCTAssertEqual(ratio(blue, of: equipment.count), 0.10, accuracy: 0.015)
         XCTAssertTrue(attributes.allSatisfy { grant in
-            grant.attributePoints.allSatisfy { RulesConfig.basePackAttributes.contains($0) }
+            grant.attributePoints.allSatisfy { RulesConfig.basePackAttributes.contains($0.key) }
         })
     }
 
@@ -90,11 +90,11 @@ final class MilestoneRulesTests: XCTestCase {
     func testMidDiceFourWaySplit() {
         let grants = run(dice: 15, count: samples)
         let baseAttr = grants.filter { grant in
-            grant.attributePoints.contains { RulesConfig.basePackAttributes.contains($0) }
+            grant.attributePoints.contains { RulesConfig.basePackAttributes.contains($0.key) }
         }
         let equipment = grants.filter { $0.mainEquipment != nil }
         let advAttr = grants.filter { grant in
-            grant.attributePoints.contains { RulesConfig.oraclePackAttributes.contains($0) }
+            grant.attributePoints.contains { RulesConfig.oraclePackAttributes.contains($0.key) }
         }
         let skills = grants.filter { $0.mainSkill != nil }
         XCTAssertEqual(baseAttr.count + equipment.count + advAttr.count + skills.count, grants.count)
