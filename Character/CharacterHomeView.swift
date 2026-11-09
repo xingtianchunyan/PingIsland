@@ -40,12 +40,14 @@ struct CharacterHomeView: View {
     }
 }
 
-/// 2.5D 万智牌式角色卡（holo-card-studio 风格）：
-/// - 等级 <100 普通卡面；100~199 银边闪；200~399 金边闪；≥400 全彩闪
+/// 2.5D 万智牌式角色卡（holo v2：纹路×光泽可组合）：
+/// - 等级档位决定默认特效组合；调试面板"卡牌特效实验台"可实时覆盖
 /// - 运气 ≥ 900 时画框背景中持续下金色雨滴
-/// - 拖动卡面小角度翻转，松手回正
+/// - 拖动卡面小角度翻转，松手回正；光泽随倾斜变色（折射物理感）
 private struct CharacterHoloCard: View {
     let snapshot: DisplaySnapshot
+    /// 调试实验台覆盖（nil = 按等级档位默认组合）
+    @ObservedObject private var lab = HoloEffectLab.shared
 
     private var foil: HoloFoil { HoloFoil.character(level: snapshot.level) }
 
@@ -109,7 +111,8 @@ private struct CharacterHoloCard: View {
                 textBox: cardText,
                 foil: foil,
                 goldRain: luck >= 900,
-                rarityColor: badgeColor
+                rarityColor: badgeColor,
+                effect: lab.override
             ) {
                 ZStack {
                     LinearGradient(colors: artGradient,

@@ -17,6 +17,30 @@ struct DebugPanelView: View {
     @State private var highWaterMark = 0
     @State private var message = ""
     @State private var anomalySleepOn = false
+    /// 卡牌特效实验台（实时覆盖角色页卡牌）
+    @ObservedObject private var lab = HoloEffectLab.shared
+
+    /// 光泽多选的 Toggle 绑定
+    private func glossBinding(_ finish: GlossFinish) -> Binding<Bool> {
+        Binding(
+            get: { lab.glosses.contains(finish) },
+            set: { on in
+                if on {
+                    lab.glosses.insert(finish)
+                } else {
+                    lab.glosses.remove(finish)
+                }
+            })
+    }
+
+    private var effectSummary: String {
+        let pattern = lab.pattern == .none ? "无纹路" : lab.pattern.rawValue
+        let glosses = lab.glosses.isEmpty
+            ? "无光泽"
+            : lab.glosses.map(\.rawValue).sorted().joined(separator: " + ")
+        return "当前组合：\(pattern) × \(glosses) × 烫\(lab.tint.rawValue)"
+            + (lab.fullFace ? "（整卡）" : "（仅边缘）")
+    }
 
     var body: some View {
         List {
@@ -69,6 +93,26 @@ struct DebugPanelView: View {
                 Button("推送 Live Activity 测试更新") { pushLiveActivity() }
                 if !message.isEmpty {
                     Text(message).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Section("卡牌特效实验台（角色页实时生效）") {
+                Toggle("启用实验组合（关闭=按闪卡档位默认）", isOn: $lab.enabled)
+                if lab.enabled {
+                    Picker("折射纹路", selection: $lab.pattern) {
+                        ForEach(RefractionPattern.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    ForEach(GlossFinish.allCases) { finish in
+                        Toggle(finish.rawValue, isOn: glossBinding(finish))
+                    }
+                    Picker("金属色调", selection: $lab.tint) {
+                        ForEach(MetallicTint.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    Toggle("纹路覆盖整卡（关=仅边框描边）", isOn: $lab.fullFace)
+                    Text(effectSummary)
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                Button("恢复档位默认组合", role: .destructive) {
+                    lab.resetToTierDefault()
                 }
             }
             Section("诊断") {
