@@ -19,11 +19,14 @@ public struct EquipmentItem: Equatable, Codable, Sendable, Identifiable {
     public var acquiredAt: Date?
     /// 获得原因（如"探索获得"，展示"因何事获得"）
     public var origin: String?
+    /// 外观类型覆盖（布甲/皮甲/铁甲/机甲；nil = 按最终 WIS 推导，调试注入用）
+    public var appearanceOverride: String?
 
     public var totalValue: Int { affixes.reduce(0) { $0 + $1.value } }
 
     public init(id: Int, slot: EquipmentSlot, rarity: Rarity, affixes: [Affix],
-                isEquipped: Bool, acquiredAt: Date? = nil, origin: String? = nil) {
+                isEquipped: Bool, acquiredAt: Date? = nil, origin: String? = nil,
+                appearanceOverride: String? = nil) {
         self.id = id
         self.slot = slot
         self.rarity = rarity
@@ -31,13 +34,14 @@ public struct EquipmentItem: Equatable, Codable, Sendable, Identifiable {
         self.isEquipped = isEquipped
         self.acquiredAt = acquiredAt
         self.origin = origin
+        self.appearanceOverride = appearanceOverride
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, slot, rarity, affixes, isEquipped, acquiredAt, origin
+        case id, slot, rarity, affixes, isEquipped, acquiredAt, origin, appearanceOverride
     }
 
-    /// 旧版本存档无 acquiredAt/origin 键：按 nil 兼容解码，其余字段照原要求
+    /// 旧版本存档无 acquiredAt/origin/appearanceOverride 键：按 nil 兼容解码，其余字段照原要求
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(Int.self, forKey: .id)
@@ -47,6 +51,7 @@ public struct EquipmentItem: Equatable, Codable, Sendable, Identifiable {
         isEquipped = try c.decode(Bool.self, forKey: .isEquipped)
         acquiredAt = try c.decodeIfPresent(Date.self, forKey: .acquiredAt)
         origin = try c.decodeIfPresent(String.self, forKey: .origin)
+        appearanceOverride = try c.decodeIfPresent(String.self, forKey: .appearanceOverride)
     }
 }
 
@@ -54,8 +59,14 @@ public enum EquipmentRules {
     /// 生成一件装备。同一 rng 序列结果确定；重试不重抽由调用方按稳定事件身份保证。
     public static func generate(id: Int, rarity: Rarity,
                                 rng: inout some RandomSource) -> EquipmentItem {
-        let spec = RulesConfig.equipmentTable[rarity]!
         let slot = EquipmentSlot.allCases[rng.nextInt(upperBound: EquipmentSlot.allCases.count)]
+        return generate(id: id, slot: slot, rarity: rarity, rng: &rng)
+    }
+
+    /// 指定部位生成（第二十批调试注入用）：词条仍按品质表从固定池不重复抽取
+    public static func generate(id: Int, slot: EquipmentSlot, rarity: Rarity,
+                                rng: inout some RandomSource) -> EquipmentItem {
+        let spec = RulesConfig.equipmentTable[rarity]!
 
         // 基础词条：从 CON/INT/DEX 不重复抽取
         var basePool = RulesConfig.basePackAttributes

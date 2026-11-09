@@ -6,6 +6,8 @@ import SwiftUI
 /// 中间「今天」分区（最常使用式行），其后按日分组展示更早记录。只读快照。
 struct DiaryView: View {
     @State private var snapshot: DisplaySnapshot = SnapshotIO.load() ?? DisplaySnapshot()
+    /// 周表选择：0 = 本周，1 = 上周（第二十批：单日记录跟随所选周刷新）
+    @State private var weekOffset = 0
 
     private var calendar: Calendar { Calendar.current }
 
@@ -16,6 +18,20 @@ struct DiaryView: View {
 
     private func isEffectiveToday(_ date: Date) -> Bool {
         calendar.isDate(date, inSameDayAs: effectiveToday)
+    }
+
+    /// 当前选中的周聚合（上周数据缺失时回退本周）
+    private var selectedWeek: DisplaySnapshot.WeekStats? {
+        weekOffset == 0 ? snapshot.weekStats
+            : (snapshot.previousWeekStats ?? snapshot.weekStats)
+    }
+
+    /// 所选周的周一 00:00（单日分区与"更早"分界线）
+    private var selectedWeekStart: Date? {
+        guard let start = selectedWeek?.weekStart else { return nil }
+        // 上周卡片的 weekStart 也可能是本周一（回退场景），按 weekOffset 显式回推
+        return weekOffset == 0 ? start
+            : (calendar.date(byAdding: .day, value: -7, to: start) ?? start)
     }
 
     /// 本地日期 key（同日分组）
@@ -31,13 +47,29 @@ struct DiaryView: View {
         return f.string(from: date)
     }
 
-    private var todayEntries: [DisplaySnapshot.DiaryDetail] {
-        (snapshot.diaryDetail ?? []).filter { isEffectiveToday($0.recordedAt) }
+    /// 所选周内的单日分区（新→旧；"今天"排在最前并带标记）
+    private var weekDayGroups: [(key: String, title: String, entries: [DisplaySnapshot.DiaryDetail])] {
+        guard let start = selectedWeekStart else { return [] }
+        let end = calendar.date(byAdding: .day, value: 7, to: start) ?? start
+        let inWeek = (snapshot.diaryDetail ?? []).filter {
+            $0.recordedAt >= start && $0.recordedAt < end
+        }
+        let grouped = Dictionary(grouping: inWeek, by: { dayKey($0.recordedAt) })
+        return grouped
+            .sorted { $0.key > $1.key }
+            .compactMap { key, entries in
+                guard let first = entries.first else { return nil }
+                return (key: key,
+                        title: isEffectiveToday(first.recordedAt) ? "今天" : dayTitle(first.recordedAt),
+                        entries: entries.sorted { $0.recordedAt > $1.recordedAt })
+            }
     }
 
+    /// 所选周之前的更早记录（按日分组，新→旧）
     private var earlierGrouped: [(key: String, title: String, entries: [DisplaySnapshot.DiaryDetail])] {
+        guard let start = selectedWeekStart else { return [] }
         let grouped = Dictionary(grouping: (snapshot.diaryDetail ?? [])
-            .filter { !isEffectiveToday($0.recordedAt) },
+            .filter { $0.recordedAt < start },
             by: { dayKey($0.recordedAt) })
         return grouped
             .sorted { $0.key > $1.key }
@@ -52,14 +84,28 @@ struct DiaryView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    if let week = snapshot.weekStats {
-                        WeekSummaryCard(week: week, today: effectiveToday)
+                    if let week = selectedWeek {
+                        WeekSummaryCard(week: week, today: effectiveToday,
+                                        title: weekOffset == 0 ? "本周" : "上周")
+                        // 第二十批：本周/上周切换；下方单日记录随之刷新
+                        Picker("周", selection: $weekOffset) {
+                            Text("本周").tag(0)
+                            Text("上周").tag(1)
+                        }
+                        .pickerStyle(.segmented)
                     }
-                    DiaryDaySection(title: "今天", entries: todayEntries,
-                                    isToday: true)
-                    ForEach(Array(earlierGrouped.enumerated()), id: \.element.key) { _, group in
+                    ForEach(Array(weekDayGroups.enumerated()), id: \.element.key) { _, group in
                         DiaryDaySection(title: group.title, entries: group.entries,
-                                        isToday: false)
+                                        isToday: group.title == "今天")
+                    }
+                    if !earlierGrouped.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("更早").font(.headline).padding(.horizontal, 4)
+                            ForEach(Array(earlierGrouped.enumerated()), id: \.element.key) { _, group in
+                                DiaryDaySection(title: group.title, entries: group.entries,
+                                                isToday: false)
+                            }
+                        }
                     }
                     if snapshot.diaryDetail == nil, let diaries = snapshot.recentDiaries, !diaries.isEmpty {
                         // 旧快照回退：结构化字段缺失时按原字符串列表展示
@@ -100,6 +146,8 @@ private struct WeekSummaryCard: View {
     let week: DisplaySnapshot.WeekStats
     /// "今天"基准（含模拟过天偏移）：柱状图高亮跟随
     let today: Date
+    /// 卡片标题（"本周" / "上周"，随周表切换）
+    let title: String
 
     private var weekdayLabels: [String] { ["一", "二", "三", "四", "五", "六", "日"] }
     private var maxMinutes: Int { max(1, week.days.map(\.minutes).max() ?? 0) }
@@ -107,7 +155,7 @@ private struct WeekSummaryCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text("本周").font(.headline)
+                Text(title).font(.headline)
                 Spacer()
                 Text(weekRangeTitle)
                     .font(.caption).foregroundStyle(.secondary)

@@ -22,9 +22,10 @@ final class SettlementEngineTests: XCTestCase {
             XCTAssertEqual(delta.newMinutes, 30) // 每个事件只补 30 分钟差额
             XCTAssertEqual(delta.milestoneGrants.count, 1) // 每满 30 分钟一次活动
         }
-        // 规则 v2 成长：每分钟 1 XP + 每活动 3×骰点 XP
+        // 规则 v3 成长：90 分钟 × 骰点/10（neutral 职业系数）+ 3 次活动 × 3×骰点 XP
+        // 分钟部分 milli = 90×D×10；活动部分 milli = 3×(3D)×100；合计 1800×D
         let dice = Int64(e.segments[day]!.dice!.value)
-        XCTAssertEqual(e.growth.totalMilli, 90 * 1000 + 9 * dice * 1000)
+        XCTAssertEqual(e.growth.totalMilli, 1800 * dice)
     }
 
     // MARK: 2. 重复事件不重复发奖（14.1-6）
@@ -48,7 +49,7 @@ final class SettlementEngineTests: XCTestCase {
         guard case .settled(let delta) = outcome else { return XCTFail() }
         XCTAssertEqual(delta.newMinutes, 0) // 已入账 90，不重复补
         let dice = Int64(a.segments[day]!.dice!.value)
-        XCTAssertEqual(a.growth.totalMilli, 90 * 1000 + 9 * dice * 1000)
+        XCTAssertEqual(a.growth.totalMilli, 1800 * dice)
     }
 
     // MARK: 4. 批量 = 逐条（14.1-7）
@@ -102,7 +103,7 @@ final class SettlementEngineTests: XCTestCase {
         XCTAssertEqual(e.segments.count, 2)
     }
 
-    // MARK: 8. 装备自动择优与收藏（14.1-10；规则 v2：骰 10 每活动必得装备）
+    // MARK: 8. 装备自动择优与收藏（14.1-10；规则 v3：骰 20 每次活动必得额外装备，消除概率不确定性)
 
     func testEquipmentAutoEquipKeepsCollection() {
         var e = SettlementEngine(groups: [.games], characterSeed: 13)
@@ -110,7 +111,7 @@ final class SettlementEngineTests: XCTestCase {
         for i in 0..<5 {
             minutes += 30
             var ev = event("eq-\(i)", .games, minutes)
-            ev.diceOverride = 10 // 必得装备，消除概率不确定性
+            ev.diceOverride = 20 // 必得额外装备，消除概率不确定性
             _ = e.process(ev)
         }
         XCTAssertFalse(e.equipment.isEmpty)
@@ -137,13 +138,14 @@ final class SettlementEngineTests: XCTestCase {
         }
         XCTAssertEqual(changed, .gladiator)
         XCTAssertEqual(e.classState, .gladiator)
-        // 规则 v2：觉醒后成长仍是固定 1 XP/分钟 + 活动加成 3×骰点，无职业系数
+        // 规则 v3：觉醒后（角斗士 matched 110%）成长 = 分钟 × 骰点/10 × 1.10 + 活动加成 3×骰点 XP
         let before = e.growth.totalMilli
         let ev = UsageEvent(stableEventID: "aw-after", group: .games, thresholdMinutes: 30,
                             localDate: "2026-11-09", confirmedAt: settleTime,
                             diceOverride: 10)
         guard case .settled(let delta) = e.process(ev) else { return XCTFail() }
-        XCTAssertEqual(delta.growthMilliApplied, Int64(delta.newMinutes) * 1000 + 30 * 1000)
+        // 分钟部分 milli = newMinutes×10×110×10/100 = newMinutes×110；活动加成 30 XP = 3000 milli
+        XCTAssertEqual(delta.growthMilliApplied, Int64(delta.newMinutes) * 110 + 3000)
         XCTAssertGreaterThan(e.growth.totalMilli, before)
     }
 

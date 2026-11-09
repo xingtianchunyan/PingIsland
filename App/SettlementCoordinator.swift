@@ -99,8 +99,9 @@ public enum SettlementCoordinator {
                         isEquipped: item.isEquipped,
                         acquiredAt: item.acquiredAt,
                         origin: item.origin,
-                        appearance: EquipmentAppearance.appearanceType(
-                            finalWisdom: engine.finalAttributes()[.wis, default: 0]))
+                        appearance: item.appearanceOverride
+                            ?? EquipmentAppearance.appearanceType(
+                                finalWisdom: engine.finalAttributes()[.wis, default: 0]))
                 },
             diaryDetail: engine.diary.reversed().map { entry in
                 DisplaySnapshot.DiaryDetail(
@@ -111,6 +112,9 @@ public enum SettlementCoordinator {
                     group: entry.group.rawValue)
             },
             weekStats: makeWeekStats(from: engine, around: effectiveToday),
+            previousWeekStats: makeWeekStats(
+                from: engine,
+                around: calendar.date(byAdding: .day, value: -7, to: effectiveToday) ?? effectiveToday),
             equippedDetail: equippedDetail(from: engine),
             skills: engine.skillCollection.items
                 .sorted { ($0.rarity != $1.rarity) ? $0.rarity > $1.rarity : $0.level > $1.level }
@@ -164,7 +168,8 @@ public enum SettlementCoordinator {
                 .joined(separator: "、")
             return DisplaySnapshot.EquippedDetail(
                 slot: slot.rawValue, isEmpty: false, rarity: item.rarity.rawValue,
-                appearance: EquipmentAppearance.appearanceType(finalWisdom: wisdom),
+                appearance: item.appearanceOverride
+                    ?? EquipmentAppearance.appearanceType(finalWisdom: wisdom),
                 affixText: affixText, totalValue: item.totalValue,
                 acquiredAt: item.acquiredAt, origin: item.origin)
         }

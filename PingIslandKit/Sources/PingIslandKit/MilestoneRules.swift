@@ -1,15 +1,17 @@
-/// 半小时活动结算（真机反馈第十九批规则 v2，单一实现来源）。
+/// 半小时活动结算（真机反馈第二十批规则 v3，单一实现来源）。
 ///
 /// 每满 30 分钟结算一次活动：
-/// - 经验加成 = 30 × 骰点 / 10（= 3 × 骰点 XP；每分钟本体成长固定 1 XP，由引擎结算）
-/// - 装备 / 特质·技能按骰点分档决定（见 resolve 注释），骰 20 额外必得一件高级装备
+/// - 经验加成 = 30 × 骰点 / 10（= 3 × 骰点 XP；每分钟本体成长由引擎按职业体系结算）
+/// - 属性 / 装备 / 特质·技能按骰点四档决定（见 resolve 注释），骰 20 额外必得一件高级装备
 import Foundation
 
 /// 一次半小时活动的结算结果。
 public struct MilestoneGrant: Equatable, Sendable {
     /// 本里程碑经验加成（XP；= 3 × 骰点）
     public var experienceXP: Int
-    /// 主结果：装备（骰 20 且主结果判为装备时为第二件之前的那件）
+    /// 属性点奖励（基础 CON/INT/DEX 或高级 LUK/WIS/CHA → 点数；无则空）
+    public var attributePoints: [Attribute: Int]
+    /// 主结果：装备
     public var mainEquipment: EquipmentItem?
     /// 主结果：特质/技能
     public var mainSkill: SkillDraw?
@@ -30,16 +32,17 @@ public enum MilestoneRules {
 
     /// 按骰点分档结算一次活动。同一 rng 序列结果确定（重试不重抽由调用方按稳定事件身份保证）。
     ///
-    /// 分档（行天第十九批规格）：
-    /// - 骰点 < 10：只有白/绿装备；获得概率 = 骰点/10；获得时白色概率 = (10−骰点)/10，其余为绿色
-    /// - 骰点 = 10：必得白/绿/蓝装备，概率 60% / 30% / 10%
-    /// - 10 < 骰点 < 20：70% 得全六阶装备（40/30/20/8/1.99/0.01%），
-    ///   30% 得白/绿/蓝特质·技能（60/30/10%）
-    /// - 骰点 = 20：装备与特质·技能各 50%，池为紫/橙/红（80/19/1%）；
+    /// 分档（行天第二十批规格 v3）：
+    /// - 骰点 < 10：装备概率 = 骰点/10（白/绿，白色率 = (10−骰点)/10）；否则基础属性 1~3 点（60/30/10%，CON/INT/DEX）
+    /// - 骰点 = 10：50% 装备（白/绿/蓝 60/30/10%），50% 基础属性 1~3 点（60/30/10%）
+    /// - 10 < 骰点 < 20：40% 基础属性 3~5 点（60/30/10%）；30% 全六阶装备（40/30/20/8/1.99/0.01%）；
+    ///   20% 高级属性 1~3 点（60/30/10%，LUK/WIS/CHA）；10% 白/绿/蓝特质·技能（60/30/10%）
+    /// - 骰点 = 20：40% 高级属性 3~5 点（60/30/10%）；30% 装备、30% 特质·技能（均紫/橙/红 80/19/1%）；
     ///   无论主结果是什么，都 100% 额外获得一件紫/橙/红装备（80/19/1%）
     public static func resolve(dice: Int, weekday: Int, equipmentID: inout Int,
                                rng: inout some RandomSource) -> MilestoneGrant {
-        var grant = MilestoneGrant(experienceXP: experienceBonus(dice: dice))
+        var grant = MilestoneGrant(experienceXP: experienceBonus(dice: dice),
+                                   attributePoints: [:])
 
         func makeEquipment(_ rarity: Rarity) -> EquipmentItem {
             equipmentID += 1
@@ -65,23 +68,67 @@ public enum MilestoneRules {
             return table.last!.rarity
         }
 
+        /// 60/30/10% 分布roll点数（1-based 档位表）
+        func rollPoints(_ table: [(points: Int, probability: Double)]) -> Int {
+            let roll = Double(rng.nextInt(upperBound: 1_000_000)) / 1_000_000.0
+            var cumulative = 0.0
+            for entry in table {
+                cumulative += entry.probability
+                if roll < cumulative { return entry.points }
+            }
+            return table.last!.points
+        }
+
+        /// 等概率抽一个属性
+        func pickAttribute(_ pool: [Attribute]) -> Attribute {
+            pool[rng.nextInt(upperBound: pool.count)]
+        }
+
+        /// 基础属性包（CON/INT/DEX）
+        func grantBaseAttribute(points: Int) {
+            grant.attributePoints[pickAttribute(RulesConfig.basePackAttributes)] = points
+        }
+
+        /// 高级属性包（LUK/WIS/CHA）
+        func grantAdvancedAttribute(points: Int) {
+            grant.attributePoints[pickAttribute(RulesConfig.oraclePackAttributes)] = points
+        }
+
+        let roll01 = { Double(rng.nextInt(upperBound: 1_000_000)) / 1_000_000.0 }
+
         if dice < 10 {
-            let d = Double(dice)
-            if Double(rng.nextInt(upperBound: 1_000_000)) / 1_000_000.0 < d / 10.0 {
-                let rarity: Rarity = Double(rng.nextInt(upperBound: 1_000_000)) / 1_000_000.0
-                    < (10.0 - d) / 10.0 ? .white : .green
+            if roll01() < Double(dice) / 10.0 {
+                let rarity: Rarity = roll01() < (10.0 - Double(dice)) / 10.0 ? .white : .green
                 grant.mainEquipment = makeEquipment(rarity)
+            } else {
+                grantBaseAttribute(points: rollPoints([
+                    (1, 0.60), (2, 0.30), (3, 0.10),
+                ]))
             }
         } else if dice == 10 {
-            grant.mainEquipment = makeEquipment(rollRarity([
-                (.white, 0.60), (.green, 0.30), (.blue, 0.10),
-            ]))
+            if roll01() < 0.50 {
+                grant.mainEquipment = makeEquipment(rollRarity([
+                    (.white, 0.60), (.green, 0.30), (.blue, 0.10),
+                ]))
+            } else {
+                grantBaseAttribute(points: rollPoints([
+                    (1, 0.60), (2, 0.30), (3, 0.10),
+                ]))
+            }
         } else if dice < 20 {
-            let roll = Double(rng.nextInt(upperBound: 1_000_000)) / 1_000_000.0
-            if roll < 0.70 {
+            let roll = roll01()
+            if roll < 0.40 {
+                grantBaseAttribute(points: rollPoints([
+                    (3, 0.60), (4, 0.30), (5, 0.10),
+                ]))
+            } else if roll < 0.70 {
                 grant.mainEquipment = makeEquipment(rollRarity([
                     (.white, 0.40), (.green, 0.30), (.blue, 0.20),
                     (.purple, 0.08), (.orange, 0.0199), (.red, 0.0001),
+                ]))
+            } else if roll < 0.90 {
+                grantAdvancedAttribute(points: rollPoints([
+                    (1, 0.60), (2, 0.30), (3, 0.10),
                 ]))
             } else {
                 grant.mainSkill = makeSkill(rollRarity([
@@ -89,15 +136,20 @@ public enum MilestoneRules {
                 ]))
             }
         } else {
-            // 骰 20：主结果装备/技能各 50%，紫/橙/红池
-            let mainIsEquipment = rng.nextInt(upperBound: 2) == 0
-            let rarity = rollRarity([
-                (.purple, 0.80), (.orange, 0.19), (.red, 0.01),
-            ])
-            if mainIsEquipment {
-                grant.mainEquipment = makeEquipment(rarity)
+            // 骰 20：高级属性 40% / 装备 30% / 特质·技能 30%，紫/橙/红池
+            let roll = roll01()
+            if roll < 0.40 {
+                grantAdvancedAttribute(points: rollPoints([
+                    (3, 0.60), (4, 0.30), (5, 0.10),
+                ]))
+            } else if roll < 0.70 {
+                grant.mainEquipment = makeEquipment(rollRarity([
+                    (.purple, 0.80), (.orange, 0.19), (.red, 0.01),
+                ]))
             } else {
-                grant.mainSkill = makeSkill(rarity)
+                grant.mainSkill = makeSkill(rollRarity([
+                    (.purple, 0.80), (.orange, 0.19), (.red, 0.01),
+                ]))
             }
             // 额外装备必得（紫/橙/红池）——独立日记记录，不占主结果
             grant.extraEquipment = makeEquipment(rollRarity([
@@ -111,6 +163,11 @@ public enum MilestoneRules {
     public static func describe(_ grant: MilestoneGrant) -> String {
         var parts: [String] = []
         if grant.experienceXP > 0 { parts.append("经验 +\(grant.experienceXP)") }
+        if !grant.attributePoints.isEmpty {
+            for (attr, points) in grant.attributePoints.sorted(by: { $0.key.rawValue < $1.key.rawValue }) {
+                parts.append("属性 +\(points) \(attr.rawValue)")
+            }
+        }
         if let item = grant.mainEquipment {
             parts.append("装备·\(rarityName(item.rarity))\(item.slot.rawValue)（评 \(item.totalValue)）")
         }

@@ -52,6 +52,8 @@ public struct DisplaySnapshot: Codable, Equatable {
     public var diaryDetail: [DiaryDetail]?
     /// 日记页"本周"聚合（屏幕使用时间式周视图；nil = 旧快照，不展示周卡）
     public var weekStats: WeekStats?
+    /// 日记页"上周"聚合（第二十批：周表可切换到上一周；nil = 旧快照，不展示）
+    public var previousWeekStats: WeekStats?
     /// 角色页装备栏（部位 → 已装备详情；nil = 旧快照，回退 equipment 字符串）
     public var equippedDetail: [EquippedDetail]?
     /// 角色页技能/特质栏（skillCollection 降序取前 N；nil = 旧快照，不展示）

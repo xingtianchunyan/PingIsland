@@ -104,6 +104,28 @@ public final class SettlementService {
         return issued
     }
 
+    // MARK: - 调试注入（第二十批：手动设置装备/技能/指定骰点）
+
+    /// 手动注入一件装备（指定部位/品质，外观可固定），走自动择优与收藏账本
+    public func debugInjectEquipment(slot: EquipmentSlot, rarity: Rarity,
+                                     appearance: String?, recordedAt: Date) {
+        engine.debugInjectEquipment(slot: slot, rarity: rarity,
+                                    appearance: appearance, recordedAt: recordedAt)
+        try? store.saveState(encoder.encode(engine))
+    }
+
+    /// 手动注入一个特质/技能（指定品质与主/被动）
+    public func debugInjectSkill(rarity: Rarity, isActive: Bool, weekday: Int) {
+        engine.debugInjectSkill(rarity: rarity, isActive: isActive, weekday: weekday)
+        try? store.saveState(encoder.encode(engine))
+    }
+
+    /// 指定某日骰点（覆盖现有值）；配合 startDay 可在过天即发神谕
+    public func debugSetDice(_ value: Int, for localDate: String) {
+        engine.debugSetDice(value, for: localDate)
+        try? store.saveState(encoder.encode(engine))
+    }
+
     private func loadJournal() throws -> [UsageEvent]? {
         guard let data = try store.loadJournal() else { return nil }
         return try decoder.decode([UsageEvent].self, from: data)

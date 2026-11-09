@@ -35,8 +35,9 @@ final class PresentationPolicyTests: XCTestCase {
 
     func testMilestoneGrantIsMilestone() {
         var d = SettlementDelta.zero
-        d.milestoneGrants = [MilestoneGrant(experienceXP: 10, mainEquipment: nil,
-                                            mainSkill: nil, extraEquipment: nil)]
+        d.milestoneGrants = [MilestoneGrant(experienceXP: 10, attributePoints: [:],
+                                            mainEquipment: nil, mainSkill: nil,
+                                            extraEquipment: nil)]
         XCTAssertEqual(PresentationPolicy.resolve(PresentationInput(latestDelta: d)), .milestone)
     }
 

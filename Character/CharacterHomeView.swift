@@ -1,21 +1,23 @@
 import PingIslandKit
 import SwiftUI
 
-/// 角色主页（执行文档 5.3-1，第十九批球星卡重构）：
+/// 角色主页（执行文档 5.3-1，第二十批球星卡重构）：
 /// 中央 = 球星卡式角色卡（立绘铺满整卡、六维雷达覆盖在立绘上层，仍是卡面内容；
-/// 闪卡按等级；运气 ≥900 或调试开关强制 → 卡面下金雨）。
-/// 装备栏 · 特质栏为卡牌下方的普通双列（第十九批撤掉浮层，后续按数据做动效）。只读展示快照。
+/// 闪卡按等级；运气 ≥900 或调试开关强制 → 卡面下金雨）。卡牌在屏幕垂直居中。
+/// 装备栏 · 特质栏已按第二十批反馈移除，后续按数据做动画/视觉效果。只读展示快照。
 struct CharacterHomeView: View {
     @State private var snapshot: DisplaySnapshot = SnapshotIO.load() ?? DisplaySnapshot()
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 14) {
-                    cardSection
+            GeometryReader { proxy in
+                ScrollView {
+                    CharacterSportsCard(snapshot: snapshot)
+                        .frame(maxWidth: .infinity)
+                        // 垂直居中：内容不足一屏时上下留白相等
+                        .frame(minHeight: proxy.size.height)
+                        .padding(.horizontal, 12)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
             }
             .background(Color(.systemGroupedBackground))
             .toolbar(.hidden, for: .navigationBar)
@@ -24,24 +26,6 @@ struct CharacterHomeView: View {
                 SettlementCoordinator.settlePending()
                 snapshot = SnapshotIO.load() ?? DisplaySnapshot()
             }
-        }
-    }
-
-    /// 球星卡 + 卡下双栏：装备栏居左、特质栏居右（普通布局，非浮层）
-    private var cardSection: some View {
-        VStack(spacing: 14) {
-            CharacterSportsCard(snapshot: snapshot)
-                .frame(maxWidth: .infinity)
-            heroRow
-        }
-    }
-
-    // 装备栏 · 特质栏（卡牌下方的左右两列）
-    private var heroRow: some View {
-        HStack(alignment: .top, spacing: 0) {
-            EquipmentColumn(details: snapshot.equippedDetail)
-            Spacer(minLength: 0)
-            TraitColumn(skills: snapshot.skills, todayDice: snapshot.todayDice)
         }
     }
 }
@@ -86,16 +70,6 @@ private struct CharacterSportsCard: View {
         }
     }
 
-    /// 徽章底色随闪卡档位升级
-    private var badgeColor: Color {
-        switch foil {
-        case .plain: return .indigo
-        case .silverEdge: return Color(white: 0.45)
-        case .goldEdge: return Color(red: 0.8, green: 0.62, blue: 0.15)
-        case .rainbow: return .purple
-        }
-    }
-
     /// 卡面风味行：最新日记 + 横幅 + 最近结算
     private var cardText: String {
         var lines: [String] = []
@@ -123,17 +97,13 @@ private struct CharacterSportsCard: View {
                     cardFaceArt(width: geo.size.width)
                         .clipShape(RoundedRectangle(cornerRadius: corner * 0.8))
                         .padding(geo.size.width * 0.02)
-                    // 六维雷达：覆盖在立绘上层，仍是卡面内容（垫半透明面板保证可读）
+                    // 六维雷达：覆盖在立绘上层，仍是卡面内容（无底板，直接压在立绘上）
                     VStack {
                         Spacer()
                         RadarChart(values: radarValues, labels: radarKeys, maxValue: radarMax,
                                    tint: .white, grid: .white)
                             .frame(height: geo.size.width * 0.48)
-                            .padding(.horizontal, geo.size.width * 0.06)
-                            .padding(.vertical, geo.size.width * 0.02)
-                            .background(.ultraThinMaterial.opacity(0.55),
-                                        in: RoundedRectangle(cornerRadius: 16))
-                            .padding(.horizontal, geo.size.width * 0.05)
+                            .padding(.horizontal, geo.size.width * 0.08)
                             .padding(.bottom, geo.size.width * 0.26)
                     }
                     // 卡底深色 scrim：名字条 + 日记风味行
@@ -226,7 +196,7 @@ private struct CharacterSportsCard: View {
         }
     }
 
-    /// 名字条：职业名 + 等级徽章（白字，压在深色 scrim 上）
+    /// 名字条：职业名 + 等级（纯文本，与职业同等样式；不用圆形底框，三位数等级也能同行显示）
     private func nameBar(width: CGFloat) -> some View {
         HStack(alignment: .center, spacing: 6) {
             Text(snapshot.className)
@@ -234,12 +204,9 @@ private struct CharacterSportsCard: View {
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            Spacer(minLength: 2)
             Text("Lv.\(snapshot.level)")
-                .font(.system(size: width * 0.042, weight: .bold).monospacedDigit())
-                .foregroundStyle(.white)
-                .frame(width: width * 0.11, height: width * 0.11)
-                .background(Circle().fill(badgeColor))
+                .font(.system(size: width * 0.048, weight: .bold).monospacedDigit())
+                .foregroundStyle(.white.opacity(0.9))
         }
         .padding(.horizontal, width * 0.02)
         .padding(.vertical, width * 0.008)
@@ -254,141 +221,6 @@ private struct CharacterSportsCard: View {
     }
 
     private var radarMax: Double { max(20, radarValues.max() ?? 20) }
-}
-
-/// 左栏：四部位装备（未装备灰显；点按无操作，纯展示）
-private struct EquipmentColumn: View {
-    let details: [DisplaySnapshot.EquippedDetail]?
-
-    var body: some View {
-        VStack(spacing: 14) {
-            ForEach(Array((details ?? []).enumerated()), id: \.offset) { _, item in
-                EquipmentSlotIcon(item: item)
-            }
-            if details == nil {
-                Text("装备在探索中自动获得")
-                    .font(.caption2).foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .frame(width: 56)
-    }
-}
-
-private struct EquipmentSlotIcon: View {
-    let item: DisplaySnapshot.EquippedDetail
-
-    private var slotIcon: String {
-        switch item.slot {
-        case "头部": return "crown.fill"
-        case "上身": return "tshirt.fill"
-        case "下身": return "figure.walk"
-        default: return "shoe.fill" // 足部
-        }
-    }
-
-    private var rarityColor: Color {
-        guard !item.isEmpty else { return .gray.opacity(0.5) }
-        switch Rarity(rawValue: item.rarity) {
-        case .green: return .green
-        case .blue: return .blue
-        case .purple: return .purple
-        case .orange: return .orange
-        case .red: return .red
-        default: return .primary
-        }
-    }
-
-    var body: some View {
-        VStack(spacing: 3) {
-            Image(systemName: slotIcon)
-                .font(.title2)
-                .foregroundStyle(rarityColor)
-                .opacity(item.isEmpty ? 0.35 : 1)
-                .frame(width: 34, height: 34)
-                .background(
-                    RoundedRectangle(cornerRadius: 9)
-                        .fill(rarityColor.opacity(item.isEmpty ? 0.05 : 0.14))
-                )
-            Text(item.slot)
-                .font(.caption2)
-                .foregroundStyle(item.isEmpty ? .tertiary : .secondary)
-        }
-        .accessibilityLabel(item.isEmpty ? "\(item.slot) 未装备" : "\(item.slot) \(item.affixText)")
-    }
-}
-
-/// 右栏：特质 / 技能（今日骰点置顶，技能按品阶取前 5）
-private struct TraitColumn: View {
-    let skills: [DisplaySnapshot.SkillDetail]?
-    let todayDice: Int?
-
-    private var weekdayName: String {
-        let names = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
-        let index = Calendar.current.component(.weekday, from: Date()) - 1
-        return names.indices.contains(index) ? names[index] : ""
-    }
-
-    var body: some View {
-        VStack(spacing: 12) {
-            if let dice = todayDice {
-                VStack(spacing: 3) {
-                    Image(systemName: "dice.fill")
-                        .font(.title2)
-                        .foregroundStyle(.indigo)
-                        .frame(width: 34, height: 34)
-                        .background(RoundedRectangle(cornerRadius: 9).fill(.indigo.opacity(0.12)))
-                    Text("骰 \(dice)")
-                        .font(.caption2.bold())
-                        .foregroundStyle(.secondary)
-                }
-                .accessibilityLabel("今日骰点 \(dice)")
-            }
-            ForEach(Array((skills ?? []).enumerated()), id: \.offset) { _, skill in
-                VStack(spacing: 3) {
-                    Image(systemName: skill.isActive ? "bolt.fill" : "sparkles")
-                        .font(.title2)
-                        .foregroundStyle(rarityColor(skill.rarity))
-                        .frame(width: 34, height: 34)
-                        .background(
-                            RoundedRectangle(cornerRadius: 9)
-                                .fill(rarityColor(skill.rarity).opacity(0.14))
-                        )
-                        .overlay(alignment: .bottomTrailing) {
-                            Text("\(skill.level)")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(.white)
-                                .padding(2)
-                                .background(Circle().fill(.secondary))
-                                .offset(x: 4, y: 4)
-                        }
-                    Text(skill.isActive ? "主动" : "被动")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .accessibilityLabel("\(weekdayName)技能，品阶\(skill.rarity)，等级\(skill.level)")
-            }
-            if skills == nil || skills?.isEmpty == true {
-                Text("特质随修行积累")
-                    .font(.caption2).foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        // 第十六批修复：高度固定为「骰点 + 6 技能」满编布局（7×49 + 6×12 间距），
-        // 内容不足时空槽留白——页面总高度不再随技能数变化，雷达位置稳定不跳动
-        .frame(width: 56, height: 415, alignment: .top)
-    }
-
-    private func rarityColor(_ rarity: Int) -> Color {
-        switch Rarity(rawValue: rarity) {
-        case .green: return .green
-        case .blue: return .blue
-        case .purple: return .purple
-        case .orange: return .orange
-        case .red: return .red
-        default: return .gray
-        }
-    }
 }
 
 /// 自绘六边形雷达：3 层网格环 + 数据多边形 + 轴标签

@@ -20,6 +20,12 @@ struct DebugPanelView: View {
     /// 触发条件开关（第十九批：开了直接满足、关了恢复规则判定）
     @State private var forceGoldRain = false
     @State private var foilOverride = 0
+    /// 手动注入：装备（部位/外观/品质）与技能（星期模板/主被动/品质）
+    @State private var injectSlot: EquipmentSlot = .head
+    @State private var injectAppearance = "自动（按 WIS）"
+    @State private var injectRarity: Rarity = .purple
+    @State private var injectWeekday = 1
+    @State private var injectActive = true
     @State private var simResult = ""
     @State private var statusLines: [String] = []
     @State private var recentEvents: [String] = []
@@ -80,12 +86,15 @@ struct DebugPanelView: View {
                 Button("模拟过一天（新骰点 + 换日神谕）") {
                     simDayOffset += 1
                     SharedStore.defaults?.set(simDayOffset, forKey: SharedStore.Keys.simDayOffset)
-                    // 第十九批：过天 = 真实场景的换日——先对新日期发神谕（骰 20 时），再刷新展示
+                    // 第二十批：过天 = 真实场景的换日——指定骰点开启时先把新日期骰点锁定，再发神谕（骰 20 时）
                     let newDate = simDate(dayOffset: simDayOffset)
                     let base = SettlementCoordinator.store().directory.deletingLastPathComponent()
                     if let service = try? SettlementService(store: SimulatedUsageSource.store(base: base),
                                                           groups: Array(TrainingGroup.allCases),
                                                           characterSeed: SimulatedUsageSource.seed) {
+                        if diceOverrideOn {
+                            service.debugSetDice(diceOverrideValue, for: newDate)
+                        }
                         let oracle = service.startDay(newDate)
                         SettlementCoordinator.syncDisplayFromSimulated(service.engine)
                         resyncDisplay(note: "已过天到 \(newDate)（\(oracle ? "神谕已发放" : "无神谕")）")
@@ -100,6 +109,33 @@ struct DebugPanelView: View {
                 if !simResult.isEmpty {
                     Text(simResult).font(.caption).foregroundStyle(.secondary)
                 }
+            }
+            Section("手动注入（直接入账模拟账本）") {
+                Picker("装备部位", selection: $injectSlot) {
+                    ForEach(EquipmentSlot.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
+                Picker("外观", selection: $injectAppearance) {
+                    ForEach(["自动（按 WIS）", "布甲", "皮甲", "铁甲", "机甲"], id: \.self) {
+                        Text($0).tag($0)
+                    }
+                }
+                Picker("品质", selection: $injectRarity) {
+                    ForEach(Rarity.allCases, id: \.self) { r in
+                        Text(rarityLabel(r)).tag(r)
+                    }
+                }
+                Button("注入装备") { injectEquipment() }
+                Picker("技能模板", selection: $injectWeekday) {
+                    ForEach(1...7, id: \.self) { Text("周\(["一","二","三","四","五","六","日"][$0-1])·\(SkillRules.template(forWeekday: $0).element)").tag($0) }
+                }
+                Picker("类型", selection: $injectActive) {
+                    Text("主动（特质）").tag(true)
+                    Text("被动（技能）").tag(false)
+                }
+                .pickerStyle(.segmented)
+                Button("注入特质/技能") { injectSkill() }
+                Text("特质/技能库已实装：掉落按当周日行模板产出（六行元素轮转），注入即入收藏")
+                    .font(.caption2).foregroundStyle(.secondary)
             }
             Section("触发条件开关（第十九批：开了直接满足，关了恢复规则判定）") {
                 Toggle("金雨预览（无视 LUK≥900 门槛）", isOn: $forceGoldRain)
@@ -324,6 +360,54 @@ struct DebugPanelView: View {
         let day = Calendar(identifier: .gregorian)
             .date(byAdding: .day, value: dayOffset, to: Date()) ?? Date()
         return dateString(day)
+    }
+
+    // MARK: - 手动注入（第二十批）
+
+    private func injectEquipment() {
+        let base = SettlementCoordinator.store().directory.deletingLastPathComponent()
+        guard let service = try? SettlementService(store: SimulatedUsageSource.store(base: base),
+                                                 groups: Array(TrainingGroup.allCases),
+                                                 characterSeed: SimulatedUsageSource.seed) else {
+            simResult = "注入失败：模拟账本不可读"
+            return
+        }
+        let appearance = injectAppearance == "自动（按 WIS）" ? nil : injectAppearance
+        service.debugInjectEquipment(slot: injectSlot, rarity: injectRarity,
+                                     appearance: appearance, recordedAt: Date())
+        SettlementCoordinator.syncDisplayFromSimulated(service.engine)
+        WidgetCenter.shared.reloadAllTimelines()
+        simResult = "已注入 \(rarityLabel(injectRarity))\(injectSlot.rawValue)（外观：\(injectAppearance)）"
+        refresh()
+    }
+
+    private func injectSkill() {
+        let base = SettlementCoordinator.store().directory.deletingLastPathComponent()
+        guard let service = try? SettlementService(store: SimulatedUsageSource.store(base: base),
+                                                 groups: Array(TrainingGroup.allCases),
+                                                 characterSeed: SimulatedUsageSource.seed) else {
+            simResult = "注入失败：模拟账本不可读"
+            return
+        }
+        service.debugInjectSkill(rarity: injectRarity, isActive: injectActive,
+                                 weekday: injectWeekday)
+        SettlementCoordinator.syncDisplayFromSimulated(service.engine)
+        WidgetCenter.shared.reloadAllTimelines()
+        let template = SkillRules.template(forWeekday: injectWeekday)
+        let name = injectActive ? template.activeName : template.passiveName
+        simResult = "已注入 \(injectActive ? "特质" : "技能")·\(name)（\(rarityLabel(injectRarity))）"
+        refresh()
+    }
+
+    private func rarityLabel(_ rarity: Rarity) -> String {
+        switch rarity {
+        case .white: return "白"
+        case .green: return "绿"
+        case .blue: return "蓝"
+        case .purple: return "紫"
+        case .orange: return "橙"
+        case .red: return "红"
+        }
     }
 
     // MARK: - Live Activity 测试更新
