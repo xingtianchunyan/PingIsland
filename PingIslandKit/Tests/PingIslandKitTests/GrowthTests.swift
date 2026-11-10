@@ -79,12 +79,18 @@ final class WisdomGrowthEngineTests: XCTestCase {
     func testWisdomIncreasesExactlyOnePerLevel() {
         var engine = SettlementEngine(groups: [.games], characterSeed: 7)
         let initialWis = engine.baseAttributes[.wis] ?? 0
-        // 480+480 分钟同组同日，骰点≥10 → ≥960 XP → 至少 9 级
-        engine.process(UsageEvent(stableEventID: "wl1", group: .games, thresholdMinutes: 480,
-                                  localDate: "2026-11-02", confirmedAt: settleTime))
-        engine.process(UsageEvent(stableEventID: "wl2", group: .games, thresholdMinutes: 960,
-                                  localDate: "2026-11-02", confirmedAt: settleTime))
-        XCTAssertGreaterThanOrEqual(engine.level, 9)
+        // 第二十一批：经验只来自活动结算（30 XP/次，上限 5 次/组/天）。
+        // 两天各 150 分钟（=5 次活动）：5×30×2 = 300 XP → 等级 4；
+        // 骰点固定 10（只发基础属性 CON/INT/DEX，永不触 WIS）→ WIS 精确 = 初始 + 等级 − 1。
+        var ev1 = UsageEvent(stableEventID: "wl1", group: .games, thresholdMinutes: 150,
+                             localDate: "2026-11-02", confirmedAt: settleTime)
+        ev1.diceOverride = 10
+        var ev2 = UsageEvent(stableEventID: "wl2", group: .games, thresholdMinutes: 150,
+                             localDate: "2026-11-03", confirmedAt: settleTime)
+        ev2.diceOverride = 10
+        engine.process(ev1)
+        engine.process(ev2)
+        XCTAssertEqual(engine.level, 4)
         XCTAssertEqual(engine.baseAttributes[.wis], initialWis + Int(engine.level) - 1)
     }
 

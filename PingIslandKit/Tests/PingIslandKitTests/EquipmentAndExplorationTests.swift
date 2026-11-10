@@ -53,6 +53,59 @@ final class EquipmentAndExplorationTests: XCTestCase {
         XCTAssertFalse(EquipmentRules.shouldEquip(newItem: green, current: blue)) // 等阶低不换
     }
 
+    // MARK: 第二十一批：外观数值倍率（布×1/皮×4/铁×16/机×64）与换装比较 v2
+
+    func testAppearanceValueMultiplier() {
+        XCTAssertEqual(EquipmentAppearance.valueMultiplier(type: "布甲"), 1)
+        XCTAssertEqual(EquipmentAppearance.valueMultiplier(type: "皮甲"), 4)
+        XCTAssertEqual(EquipmentAppearance.valueMultiplier(type: "铁甲"), 16)
+        XCTAssertEqual(EquipmentAppearance.valueMultiplier(type: "机甲"), 64)
+        XCTAssertEqual(EquipmentAppearance.tierRank(type: "布甲"), 0)
+        XCTAssertEqual(EquipmentAppearance.tierRank(type: "机甲"), 3)
+    }
+
+    func testGenerateWithAppearanceScalesAffixValues() {
+        var rng = SeededRandom(seed: 5)
+        let iron = EquipmentRules.generate(id: 9, slot: .head, rarity: .purple,
+                                           appearance: "铁甲", rng: &rng)
+        XCTAssertEqual(iron.affixes.count, 4)   // 3 基础 + 1 高级
+        XCTAssertEqual(iron.totalValue, 4 * 4 * 16) // 4 条 × 基础 4 × 铁甲 16
+        XCTAssertEqual(iron.appearance, "铁甲")  // 外观随装备入库
+        // 旧两参重载默认布甲，数值行为与旧版一致
+        var rng2 = SeededRandom(seed: 5)
+        let cloth = EquipmentRules.generate(id: 9, rarity: .purple, rng: &rng2)
+        XCTAssertEqual(cloth.totalValue, 16)
+    }
+
+    func testAutoEquipV2LowTierNeedsDoubleValueAndHigherAppearance() {
+        let cur = EquipmentItem(id: 1, slot: .head, rarity: .purple,
+                                affixes: [Affix(attribute: .con, value: 4)], isEquipped: true,
+                                appearance: "布甲")
+        // 蓝色铁甲数值翻倍 → 允许顶替紫色布甲
+        let strongIron = EquipmentItem(id: 2, slot: .head, rarity: .blue,
+                                       affixes: [Affix(attribute: .con, value: 8)],
+                                       isEquipped: false, appearance: "铁甲")
+        XCTAssertTrue(EquipmentRules.shouldEquip(newItem: strongIron, current: cur))
+        // 数值不足翻倍 → 不换
+        let weakIron = EquipmentItem(id: 3, slot: .head, rarity: .blue,
+                                     affixes: [Affix(attribute: .con, value: 4)],
+                                     isEquipped: false, appearance: "铁甲")
+        XCTAssertFalse(EquipmentRules.shouldEquip(newItem: weakIron, current: cur))
+        // 外观档位不更高（同为布甲）→ 低稀有永不覆盖高稀有
+        let weakCloth = EquipmentItem(id: 6, slot: .head, rarity: .blue,
+                                      affixes: [Affix(attribute: .con, value: 100)],
+                                      isEquipped: false, appearance: "布甲")
+        XCTAssertFalse(EquipmentRules.shouldEquip(newItem: weakCloth, current: cur))
+        // 红色受保护：紫机甲数值再高也不顶红色布甲
+        let red = EquipmentItem(id: 4, slot: .head, rarity: .red,
+                                affixes: [Affix(attribute: .con, value: 1)], isEquipped: true,
+                                appearance: "布甲")
+        let purpleMech = EquipmentItem(id: 5, slot: .head, rarity: .purple,
+                                       affixes: [Affix(attribute: .con, value: 400)],
+                                       isEquipped: false, appearance: "机甲")
+        XCTAssertFalse(EquipmentRules.shouldEquip(newItem: purpleMech, current: red))
+    }
+
     func testCharmExtraBoundaries() {
         XCTAssertEqual(ExplorationRules.charmExtraChance(finalCharm: 0), 0)
         XCTAssertEqual(ExplorationRules.charmExtraChance(finalCharm: 5000), 0.5, accuracy: 0.0001)

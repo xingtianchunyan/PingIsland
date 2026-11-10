@@ -288,6 +288,8 @@ struct CollectionView: View {
     @State private var snapshot: DisplaySnapshot = SnapshotIO.load() ?? DisplaySnapshot()
     /// 当前放大展示的装备卡（nil = 无放大）
     @State private var expandedItem: DisplaySnapshot.EquippedDetail?
+    /// 第二十一批 Phase B：三标签（装备 / 特质·技能 / 图鉴）
+    @State private var tab = 0
 
     /// 今天获得的装备（acquiredAt 在"有效今天"内；旧存档无获得时间的不计入）
     private var effectiveToday: Date {
@@ -306,7 +308,15 @@ struct CollectionView: View {
             ZStack {
                 ScrollView {
                     LazyVStack(spacing: 16) {
-                        if let equipped = snapshot.equippedDetail {
+                        // 第二十一批 Phase B：三标签切换
+                        Picker("收藏", selection: $tab) {
+                            Text("装备").tag(0)
+                            Text("特质·技能").tag(1)
+                            Text("图鉴").tag(2)
+                        }
+                        .pickerStyle(.segmented)
+
+                        if tab == 0, let equipped = snapshot.equippedDetail {
                             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())],
                                       spacing: 12) {
                                 ForEach(Array(equipped.enumerated()), id: \.offset) { _, item in
@@ -320,6 +330,7 @@ struct CollectionView: View {
                             }
                         }
 
+                    if tab == 0 {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("今日获得")
                             .font(.headline)
@@ -346,9 +357,20 @@ struct CollectionView: View {
                                             in: RoundedRectangle(cornerRadius: 14))
                         }
                     }
+                    }
+
+                        // 特质·技能标签：12 模板收集墙 + 技能连结（D4）
+                        if tab == 1 {
+                            SkillCollectionWall(snapshot: snapshot)
+                        }
+
+                        // 图鉴标签：12 怪物遭遇/胜数（Phase A-5）
+                        if tab == 2 {
+                            BestiaryGrid(snapshot: snapshot)
+                        }
 
                     // 旧快照回退：无结构化字段时按原字符串列表展示
-                    if snapshot.collectionDetail == nil, let collection = snapshot.collection,
+                    if tab == 0, snapshot.collectionDetail == nil, let collection = snapshot.collection,
                        !collection.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             ForEach(Array(collection.enumerated()), id: \.offset) { _, entry in

@@ -4,10 +4,54 @@
 
 import Foundation
 
+/// 图鉴怪物全 roster（12 只；D2 元素分配按默认决策）。
+/// 遭遇结算仍只用 encounterPool 前三只（9.7 概率与 golden 输出不变，红线）。
 public enum Monster: String, CaseIterable, Codable, Sendable {
-    case skeleton = "小骷髅"
-    case goblin = "哥布林"
-    case slime = "史莱姆"
+    case skeleton = "小骷髅"          // D2：土
+    case goblin = "哥布林"            // D2：金
+    case slime = "史莱姆"             // D2：水
+    case sapling = "树苗精"           // 木
+    case mushroom = "蘑菇怪"          // 木
+    case salamander = "火蜥蜴"        // 火
+    case cinderBat = "火花蝠"         // 火
+    case rockCrab = "岩壳蟹"          // 土
+    case rustPuppet = "锈铁傀儡"      // 金
+    case waterWisp = "小水灵"         // 水
+    case staticOrb = "静电球"         // 雷
+    case thunderFledgling = "雷雀"    // 雷
+
+    /// 遭遇结算使用的怪物池（保持 9.7 的 30%/50-50 分布与 golden 确定性不变）
+    public static let encounterPool: [Monster] = [.skeleton, .goblin, .slime]
+
+    /// 内容库美术键（monsterArtKeys 的键）
+    public var artKey: String {
+        switch self {
+        case .skeleton: return "skeleton"
+        case .goblin: return "goblin"
+        case .slime: return "slime"
+        case .sapling: return "sapling"
+        case .mushroom: return "mushroom"
+        case .salamander: return "salamander"
+        case .cinderBat: return "cinder_bat"
+        case .rockCrab: return "rock_crab"
+        case .rustPuppet: return "rust_puppet"
+        case .waterWisp: return "water_wisp"
+        case .staticOrb: return "static_orb"
+        case .thunderFledgling: return "thunder_fledgling"
+        }
+    }
+
+    /// 元素（D2 + 扩展九只的自然归属；雷为催化剂）
+    public var element: SkillElement {
+        switch self {
+        case .skeleton, .rockCrab: return .earth
+        case .goblin, .rustPuppet: return .metal
+        case .slime, .waterWisp: return .water
+        case .sapling, .mushroom: return .wood
+        case .salamander, .cinderBat: return .fire
+        case .staticOrb, .thunderFledgling: return .thunder
+        }
+    }
 }
 
 public enum DiaryEntryType: String, Codable, Sendable {
@@ -40,7 +84,8 @@ public enum EncounterRules {
 
     public static func resolve(rng: inout some RandomSource) -> EncounterResult {
         if rng.nextInt(upperBound: 100) < monsterChancePercent {
-            let monster = Monster.allCases[rng.nextInt(upperBound: Monster.allCases.count)]
+            let monster = Monster.encounterPool[
+                rng.nextInt(upperBound: Monster.encounterPool.count)]
             let won = rng.nextInt(upperBound: 2) == 0
             return EncounterResult(
                 entryType: won ? .monsterWin : .monsterLose,

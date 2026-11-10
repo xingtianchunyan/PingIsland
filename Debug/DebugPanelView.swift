@@ -21,9 +21,12 @@ struct DebugPanelView: View {
     @State private var forceGoldRain = false
     @State private var foilOverride = 0
     /// 手动注入：装备（部位/外观/品质）与技能（星期模板/主被动/品质）
+    /// 卡牌特效实验台（holo-card v2：实时覆盖角色页卡牌特效组合）
+    @ObservedObject private var lab = HoloEffectLab.shared
     @State private var injectSlot: EquipmentSlot = .head
     @State private var injectAppearance = "自动（按 WIS）"
     @State private var injectRarity: Rarity = .purple
+    @State private var injectSkillRarity: Rarity = .blue
     @State private var injectWeekday = 1
     @State private var injectActive = true
     @State private var simResult = ""
@@ -80,7 +83,11 @@ struct DebugPanelView: View {
                         summaries.append(injectSimulated(dayOffset: simDayOffset + i,
                                                          minutes: 480, quiet: true))
                     }
-                    simResult = summaries.joined(separator: "\n") + "\n已同步展示快照"
+                    // 第二十一批：连注后"今天"推进到最后注入日，此前各周随之变为上周/更早，
+                    // 日记周表与单日记录在测试中可正确滚动
+                    simDayOffset += max(0, streakDays - 1)
+                    SharedStore.defaults?.set(simDayOffset, forKey: SharedStore.Keys.simDayOffset)
+                    simResult = summaries.joined(separator: "\n") + "\n已同步展示快照（今天推进到 +\(simDayOffset) 天）"
                     refresh()
                 }
                 Button("模拟过一天（新骰点 + 换日神谕）") {
@@ -95,7 +102,9 @@ struct DebugPanelView: View {
                         if diceOverrideOn {
                             service.debugSetDice(diceOverrideValue, for: newDate)
                         }
-                        let oracle = service.startDay(newDate)
+                        // 第二十一批：神谕记录的落点取模拟日期当天（此前误用真实 now，
+                        // 日记分组把神谕固定塞进现实时间那一天）
+                        let oracle = service.startDay(newDate, recordedAt: simDateTime(newDate))
                         SettlementCoordinator.syncDisplayFromSimulated(service.engine)
                         resyncDisplay(note: "已过天到 \(newDate)（\(oracle ? "神谕已发放" : "无神谕")）")
                     } else {
@@ -129,10 +138,15 @@ struct DebugPanelView: View {
                     ForEach(1...7, id: \.self) { Text("周\(["一","二","三","四","五","六","日"][$0-1])·\(SkillRules.template(forWeekday: $0).element)").tag($0) }
                 }
                 Picker("类型", selection: $injectActive) {
-                    Text("主动（特质）").tag(true)
-                    Text("被动（技能）").tag(false)
+                    Text("主动（技能）").tag(true)
+                    Text("被动（特质）").tag(false)
                 }
                 .pickerStyle(.segmented)
+                Picker("技能品质", selection: $injectSkillRarity) {
+                    ForEach(Rarity.allCases, id: \.self) { r in
+                        Text(rarityLabel(r)).tag(r)
+                    }
+                }
                 Button("注入特质/技能") { injectSkill() }
                 Text("特质/技能库已实装：掉落按当周日行模板产出（六行元素轮转），注入即入收藏")
                     .font(.caption2).foregroundStyle(.secondary)
@@ -154,6 +168,27 @@ struct DebugPanelView: View {
                 }
                 Text("角色卡与装备卡即时生效；仅供预览特效，不影响结算数据")
                     .font(.caption2).foregroundStyle(.secondary)
+            }
+            // 第二十一批：holo-card v2 特效实验台（在闪卡档位预览之上做细粒度组合）
+            Section("卡牌特效实验台（holo v2：角色页实时生效）") {
+                Toggle("启用实验组合（关闭=按闪卡档位默认）", isOn: $lab.enabled)
+                if lab.enabled {
+                    Picker("折射纹路", selection: $lab.pattern) {
+                        ForEach(RefractionPattern.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    ForEach(GlossFinish.allCases) { finish in
+                        Toggle(finish.rawValue, isOn: glossBinding(finish))
+                    }
+                    Picker("金属色调", selection: $lab.tint) {
+                        ForEach(MetallicTint.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    Toggle("纹路覆盖整卡（关=仅边框描边）", isOn: $lab.fullFace)
+                    Text(labEffectSummary)
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                Button("恢复档位默认组合", role: .destructive) {
+                    lab.resetToTierDefault()
+                }
             }
             Section("测试刷新") {
                 Button("刷新展示（重新同步快照/三个页面）") {
@@ -362,6 +397,41 @@ struct DebugPanelView: View {
         return dateString(day)
     }
 
+    /// 模拟日期当天的指定时刻（默认 08:00）：神谕等换日记录的落点，
+    /// 保证日记按日分组跟随模拟日期，而非真实 now
+    private func simDateTime(_ localDate: String, hour: Int = 8) -> Date {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.dateFormat = "yyyy-MM-dd"
+        let day = f.date(from: localDate) ?? Date()
+        return Calendar(identifier: .gregorian)
+            .date(bySettingHour: hour, minute: 0, second: 0, of: day) ?? day
+    }
+
+    // MARK: - 实验台辅助
+
+    /// 光泽多选的 Toggle 绑定
+    private func glossBinding(_ finish: GlossFinish) -> Binding<Bool> {
+        Binding(
+            get: { lab.glosses.contains(finish) },
+            set: { on in
+                if on {
+                    lab.glosses.insert(finish)
+                } else {
+                    lab.glosses.remove(finish)
+                }
+            })
+    }
+
+    private var labEffectSummary: String {
+        let pattern = lab.pattern == .none ? "无纹路" : lab.pattern.rawValue
+        let glosses = lab.glosses.isEmpty
+            ? "无光泽"
+            : lab.glosses.map(\.rawValue).sorted().joined(separator: " + ")
+        return "当前组合：\(pattern) × \(glosses) × 烫\(lab.tint.rawValue)"
+            + (lab.fullFace ? "（整卡）" : "（仅边缘）")
+    }
+
     // MARK: - 手动注入（第二十批）
 
     private func injectEquipment() {
@@ -389,13 +459,13 @@ struct DebugPanelView: View {
             simResult = "注入失败：模拟账本不可读"
             return
         }
-        service.debugInjectSkill(rarity: injectRarity, isActive: injectActive,
+        service.debugInjectSkill(rarity: injectSkillRarity, isActive: injectActive,
                                  weekday: injectWeekday)
         SettlementCoordinator.syncDisplayFromSimulated(service.engine)
         WidgetCenter.shared.reloadAllTimelines()
         let template = SkillRules.template(forWeekday: injectWeekday)
         let name = injectActive ? template.activeName : template.passiveName
-        simResult = "已注入 \(injectActive ? "特质" : "技能")·\(name)（\(rarityLabel(injectRarity))）"
+        simResult = "已注入 \(injectActive ? "技能" : "特质")·\(name)（\(rarityLabel(injectSkillRarity))）"
         refresh()
     }
 

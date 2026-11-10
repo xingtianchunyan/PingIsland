@@ -40,13 +40,15 @@ public enum MilestoneRules {
     /// - 骰点 = 20：40% 高级属性 3~5 点（60/30/10%）；30% 装备、30% 特质·技能（均紫/橙/红 80/19/1%）；
     ///   无论主结果是什么，都 100% 额外获得一件紫/橙/红装备（80/19/1%）
     public static func resolve(dice: Int, weekday: Int, equipmentID: inout Int,
+                               appearance: String = "布甲",
                                rng: inout some RandomSource) -> MilestoneGrant {
         var grant = MilestoneGrant(experienceXP: experienceBonus(dice: dice),
                                    attributePoints: [:])
 
         func makeEquipment(_ rarity: Rarity) -> EquipmentItem {
             equipmentID += 1
-            return EquipmentRules.generate(id: equipmentID, rarity: rarity, rng: &rng)
+            return EquipmentRules.generate(id: equipmentID, rarity: rarity,
+                                           appearance: appearance, rng: &rng)
         }
 
         func makeSkill(_ rarity: Rarity) -> SkillDraw {
@@ -175,7 +177,8 @@ public enum MilestoneRules {
         }
         if let skill = grant.mainSkill {
             let name = skill.isActive ? skill.template.activeName : skill.template.passiveName
-            parts.append("\(skill.isActive ? "特质" : "技能")·\(name)（\(rarityName(skill.rarity))）")
+            // 主动 = 技能，被动 = 特质（行天第二十一批口径）
+            parts.append("\(skill.isActive ? "技能" : "特质")·\(name)（\(rarityName(skill.rarity))）")
         }
         return parts.isEmpty ? "平稳的半小时" : parts.joined(separator: "，")
     }

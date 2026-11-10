@@ -54,6 +54,12 @@ public struct DisplaySnapshot: Codable, Equatable {
     public var weekStats: WeekStats?
     /// 日记页"上周"聚合（第二十批：周表可切换到上一周；nil = 旧快照，不展示）
     public var previousWeekStats: WeekStats?
+    /// 卡面 3 技能（Phase A D3；遇怪取克制，不足补齐）
+    public var cardSkills: [CardSkill]?
+    /// 技能连结（Phase A D4 四档）
+    public var skillLinks: [SkillLink]?
+    /// 图鉴（怪物 × 遭遇 × 胜数，仅已遇见的）
+    public var bestiary: [BestiaryEntry]?
     /// 角色页装备栏（部位 → 已装备详情；nil = 旧快照，回退 equipment 字符串）
     public var equippedDetail: [EquippedDetail]?
     /// 角色页技能/特质栏（skillCollection 降序取前 N；nil = 旧快照，不展示）
@@ -178,6 +184,8 @@ public struct DisplaySnapshot: Codable, Equatable {
                 collectionDetail: [CollectionDetail]? = nil,
                 diaryDetail: [DiaryDetail]? = nil, weekStats: WeekStats? = nil,
                 previousWeekStats: WeekStats? = nil,
+                cardSkills: [CardSkill]? = nil, skillLinks: [SkillLink]? = nil,
+                bestiary: [BestiaryEntry]? = nil,
                 equippedDetail: [EquippedDetail]? = nil, skills: [SkillDetail]? = nil,
                 todayDice: Int? = nil, dayOffset: Int = 0) {
         self.level = level
@@ -195,6 +203,9 @@ public struct DisplaySnapshot: Codable, Equatable {
         self.diaryDetail = diaryDetail
         self.weekStats = weekStats
         self.previousWeekStats = previousWeekStats
+        self.cardSkills = cardSkills
+        self.skillLinks = skillLinks
+        self.bestiary = bestiary
         self.equippedDetail = equippedDetail
         self.skills = skills
         self.todayDice = todayDice
@@ -207,6 +218,7 @@ public struct DisplaySnapshot: Codable, Equatable {
         case snapshotVersion, displayPriority, bannerText, attributes, equipment
         case recentDiaries, collection, collectionDetail, diaryDetail, weekStats
         case previousWeekStats
+        case cardSkills, skillLinks, bestiary
         case equippedDetail, skills, todayDice, dayOffset
     }
 
@@ -229,6 +241,9 @@ public struct DisplaySnapshot: Codable, Equatable {
         diaryDetail = try c.decodeIfPresent([DiaryDetail].self, forKey: .diaryDetail)
         weekStats = try c.decodeIfPresent(WeekStats.self, forKey: .weekStats)
         previousWeekStats = try c.decodeIfPresent(WeekStats.self, forKey: .previousWeekStats)
+        cardSkills = try c.decodeIfPresent([CardSkill].self, forKey: .cardSkills)
+        skillLinks = try c.decodeIfPresent([SkillLink].self, forKey: .skillLinks)
+        bestiary = try c.decodeIfPresent([BestiaryEntry].self, forKey: .bestiary)
         equippedDetail = try c.decodeIfPresent([EquippedDetail].self, forKey: .equippedDetail)
         skills = try c.decodeIfPresent([SkillDetail].self, forKey: .skills)
         todayDice = try c.decodeIfPresent(Int.self, forKey: .todayDice)

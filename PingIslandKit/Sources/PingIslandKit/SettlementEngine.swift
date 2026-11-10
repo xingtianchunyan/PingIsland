@@ -208,16 +208,18 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
         segment = segments[event.localDate] ?? segment
         let dice = segment.dice?.value ?? 10
 
-        // 5. 每分钟经验（真机反馈第二十批规则 v3.1）：固定 1 XP/分钟，
-        // 不乘骰点、不乘职业系数（骰点只作用于活动结算与掉落，职业系数见第 7 步每级成长）
+        // 5. 每分钟经验已移除（真机反馈第二十一批）：经验只来自半小时活动结算，
+        //    升级不再容易；职业系数作用于活动 XP（见第 6 步）与每级成长（见第 7 步）
         var dayMilli: Int64 = 0
-        if newMinutes > 0 {
-            // dice=10、neutral → milli = 分钟 × 10 × 100 × 10 × 10 / 100 = 分钟 × 1000 = 1 XP/分钟
-            dayMilli += growth.settle(minutes: newMinutes, dice: 10, factor: .neutral)
-        }
 
-        // 6. 每满 30 分钟一次活动结算（规则 v3）：经验加成 30×骰点/10 +
+        // 6. 每满 30 分钟一次活动结算（规则 v3）：经验加成 30×骰点/10 × 职业系数 +
         //    按骰点四档得属性 / 装备 / 特质·技能（骰 20 额外必得一件高级装备）
+        let activityFactor: GrowthFactor
+        if let cls = classState {
+            activityFactor = (cls == .ranger) ? .ranger : .matched
+        } else {
+            activityFactor = .neutral
+        }
         let milestoneCount = event.thresholdMinutes / RulesConfig().explorationThresholdMinutes
         let previousMilestones = applied / RulesConfig().explorationThresholdMinutes
         let due = max(0, min(milestoneCount, RulesConfig().maxExplorationsPerGroupPerDay)
@@ -228,8 +230,12 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
             guard segment.tryConsumeExploration(for: event.group) else { break }
             var milestoneRng = SeededRandom(seed: fnv1a64(
                 "milestone|\(event.stableEventID)|\(previousMilestones + index + 1)"))
+            // 外观按生成时刻最终 WIS 定型（与展示推导一致），词条数值随之乘外观倍率
+            let appearance = EquipmentAppearance.appearanceType(
+                finalWisdom: finalAttributes()[.wis, default: 0])
             let grant = MilestoneRules.resolve(dice: dice, weekday: weekday,
-                                               equipmentID: &equipmentID, rng: &milestoneRng)
+                                               equipmentID: &equipmentID,
+                                               appearance: appearance, rng: &milestoneRng)
             apply(equipment: grant.allEquipment, recordedAt: event.confirmedAt,
                   origin: "修行活动·\(event.thresholdMinutes) 分钟里程碑")
             if let skill = grant.mainSkill { skillCollection.add(skill) }
@@ -237,8 +243,9 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
             for (attr, points) in grant.attributePoints {
                 baseAttributes[attr, default: 0] += points
             }
-            // 活动经验加成入账（3×骰点 XP，以 dice=10 的 settle 折算为千分点）
-            dayMilli += growth.settle(minutes: grant.experienceXP, dice: 10, factor: .neutral)
+            // 活动经验入账（3×骰点 XP × 职业系数；settle(dice:10) = XP×1000 milli）
+            dayMilli += growth.settle(minutes: grant.experienceXP, dice: 10,
+                                      factor: activityFactor)
             delta.milestoneGrants.append(grant)
             delta.diaries.append(DiaryRecord(
                 recordedAt: event.confirmedAt, group: event.group,
@@ -312,10 +319,13 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
     /// 手动注入一件装备（指定部位/品质，外观可固定覆盖），走自动择优与收藏账本
     public mutating func debugInjectEquipment(slot: EquipmentSlot, rarity: Rarity,
                                               appearance: String?, recordedAt: Date) {
-        var rng = SeededRandom(seed: fnv1a64("debug-equipment|\(equipment.count)|\(slot.rawValue)|\(rarity.rawValue)"))
-        var item = EquipmentRules.generate(id: equipment.count + 1, slot: slot,
-                                           rarity: rarity, rng: &rng)
-        item.appearanceOverride = appearance
+        var rng = SeededRandom(seed: fnv1a64("debug-equipment|\(equipment.count)|\(slot.rawValue)|\(rarity.rawValue)|\(appearance ?? "auto")"))
+        // 外观：指定则用指定，否则按当前最终 WIS 推导（与真实掉落一致，倍率随之生效）
+        let resolved = appearance ?? EquipmentAppearance.appearanceType(
+            finalWisdom: finalAttributes()[.wis, default: 0])
+        let item = EquipmentRules.generate(id: equipment.count + 1, slot: slot,
+                                           rarity: rarity, appearance: resolved,
+                                           rng: &rng)
         apply(equipment: [item], recordedAt: recordedAt, origin: "调试注入")
     }
 

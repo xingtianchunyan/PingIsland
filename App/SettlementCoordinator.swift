@@ -89,6 +89,7 @@ public enum SettlementCoordinator {
                 acquiredAt: item.acquiredAt,
                 origin: item.origin,
                 appearance: item.appearanceOverride
+                    ?? item.appearance
                     ?? EquipmentAppearance.appearanceType(
                         finalWisdom: finalAttrs[.wis, default: 0]))
         }
@@ -111,9 +112,9 @@ public enum SettlementCoordinator {
         let snapshotVersion = (SnapshotIO.load()?.snapshotVersion ?? 0) + 1
         let banner = PresentationPolicy.banner(for: priority, input: priorityInput)
         let todayDiceValue = engine.segments[today]?.dice?.value ?? engine.previewDice(for: today)
+        // 第二十一批：全量入快照（收藏墙 12×6 需要；旧 UI 只读计数不受影响）
         let skillDetails: [DisplaySnapshot.SkillDetail] = engine.skillCollection.items
             .sorted { ($0.rarity != $1.rarity) ? $0.rarity > $1.rarity : $0.level > $1.level }
-            .prefix(6)
             .map { DisplaySnapshot.SkillDetail(weekday: $0.weekday, isActive: $0.isActive,
                                                rarity: $0.rarity.rawValue, level: $0.level) }
         let snapshot = DisplaySnapshot(
@@ -134,12 +135,30 @@ public enum SettlementCoordinator {
             diaryDetail: diaryDetails,
             weekStats: makeWeekStats(from: engine, around: effectiveToday),
             previousWeekStats: makeWeekStats(from: engine, around: previousAnchor),
+            // Phase A（D1-D4 默认）：卡面 3 技能（克制最近一次遭遇怪）、技能连结、图鉴
+            cardSkills: CardSkillRules.select(owned: engine.skillCollection.items,
+                                              countered: latestMonsterElement(in: engine)),
+            skillLinks: SkillLinkRules.derive(owned: engine.skillCollection.items),
+            bestiary: BestiaryRules.aggregate(diary: engine.diary),
             equippedDetail: equippedDetail(from: engine),
             skills: skillDetails,
             todayDice: todayDiceValue,
             dayOffset: dayOffset
         )
         SnapshotIO.save(snapshot)
+    }
+
+    /// 最近一次怪物遭遇的元素（卡面技能克制目标；无遭遇返回 nil）
+    private static func latestMonsterElement(in engine: SettlementEngine) -> SkillElement? {
+        for entry in engine.diary.reversed() where entry.entryType == .monsterWin
+            || entry.entryType == .monsterLose {
+            guard entry.textKey.hasPrefix("encounter.") else { continue }
+            let body = String(entry.textKey.dropFirst("encounter.".count))
+            let name = body.split(separator: ".", omittingEmptySubsequences: false)
+                .first.map(String.init) ?? ""
+            return Monster(rawValue: name)?.element
+        }
+        return nil
     }
 
     /// 本周一（本地日历，周一为一周之首）起 7 天聚合；anchor 为"今天"基准（含模拟偏移）
@@ -184,6 +203,7 @@ public enum SettlementCoordinator {
             return DisplaySnapshot.EquippedDetail(
                 slot: slot.rawValue, isEmpty: false, rarity: item.rarity.rawValue,
                 appearance: item.appearanceOverride
+                    ?? item.appearance
                     ?? EquipmentAppearance.appearanceType(finalWisdom: wisdom),
                 affixText: affixText, totalValue: item.totalValue,
                 acquiredAt: item.acquiredAt, origin: item.origin)
