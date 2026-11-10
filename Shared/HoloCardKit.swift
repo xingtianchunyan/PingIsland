@@ -295,10 +295,11 @@ private struct WavePattern: View {
                 let steps = 24
                 for s in 0...steps {
                     let x = size.width * CGFloat(s) / CGFloat(steps)
-                    let wave = sin(Double(s) / Double(steps) * Double.pi * 2
-                        + phase * Double.pi * 2 * 1.5 + progress * 5.0 + tiltShift * 3)
-                    let y = size.height * (0.5 + (progress - 0.5) * 0.9)
-                        + CGFloat(wave) * amplitude
+                    let angle = Double(s) / Double(steps) * Double.pi * 2
+                        + phase * Double.pi * 3 + progress * 5.0 + tiltShift * 3
+                    let wave = sin(angle)
+                    let bandY = size.height * CGFloat(0.5 + (progress - 0.5) * 0.9)
+                    let y = bandY + CGFloat(wave) * amplitude
                     path.addLine(to: CGPoint(x: x, y: y))
                 }
                 path.addLine(to: CGPoint(x: size.width + 4, y: -4))
@@ -326,8 +327,9 @@ private struct AtomicPattern: View {
             for row in 0...rows {
                 for col in 0...cols {
                     let h = Fract.hash(row * 53 + col * 127)
-                    let sparkle = pow(max(0, sin(phase * Double.pi * 4
-                        + Double(row + col) * 0.7 + h * 6.0 + tiltShift * 4)), 12)
+                    let flicker = phase * Double.pi * 4
+                        + Double(row + col) * 0.7 + h * 6.0 + tiltShift * 4
+                    let sparkle = pow(max(0, sin(flicker)), 12)
                     guard sparkle > 0.03 else { continue }
                     let side = cell * (0.45 + CGFloat(h) * 0.3)
                     let rect = CGRect(x: CGFloat(col) * cell + (cell - side) / 2,
