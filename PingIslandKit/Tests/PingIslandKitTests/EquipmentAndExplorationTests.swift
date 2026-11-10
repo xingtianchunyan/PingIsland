@@ -96,14 +96,20 @@ final class EquipmentAndExplorationTests: XCTestCase {
                                       affixes: [Affix(attribute: .con, value: 100)],
                                       isEquipped: false, appearance: "布甲")
         XCTAssertFalse(EquipmentRules.shouldEquip(newItem: weakCloth, current: cur))
-        // 红色受保护：紫机甲数值再高也不顶红色布甲
+        // 高稀有（含红色）被低阶覆盖需要"外观档位更高 + 数值 ≥ 当前×2"双条件
         let red = EquipmentItem(id: 4, slot: .head, rarity: .red,
-                                affixes: [Affix(attribute: .con, value: 1)], isEquipped: true,
+                                affixes: [Affix(attribute: .con, value: 20)], isEquipped: true,
                                 appearance: "布甲")
-        let purpleMech = EquipmentItem(id: 5, slot: .head, rarity: .purple,
-                                       affixes: [Affix(attribute: .con, value: 400)],
+        // 紫机甲数值不足翻倍 → 不换（红色不轻易被覆盖）
+        let weakMech = EquipmentItem(id: 5, slot: .head, rarity: .purple,
+                                     affixes: [Affix(attribute: .con, value: 39)],
+                                     isEquipped: false, appearance: "机甲")
+        XCTAssertFalse(EquipmentRules.shouldEquip(newItem: weakMech, current: red))
+        // 紫机甲数值 ≥ 当前×2 且外观档位更高 → 换（规则一致性：双条件都满足）
+        let strongMech = EquipmentItem(id: 7, slot: .head, rarity: .purple,
+                                       affixes: [Affix(attribute: .con, value: 40)],
                                        isEquipped: false, appearance: "机甲")
-        XCTAssertFalse(EquipmentRules.shouldEquip(newItem: purpleMech, current: red))
+        XCTAssertTrue(EquipmentRules.shouldEquip(newItem: strongMech, current: red))
     }
 
     func testCharmExtraBoundaries() {
