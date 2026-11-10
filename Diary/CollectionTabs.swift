@@ -204,6 +204,11 @@ private struct BestiaryCell: View {
         }
     }
 
+    private var accessibilityText: String {
+        guard let entry else { return "尚未遇见的怪物，\(monster.element.rawValue)属性" }
+        return "\(monster.rawValue)，\(monster.element.rawValue)属性，遭遇\(entry.encounters)次，胜\(entry.wins)次"
+    }
+
     var body: some View {
         VStack(spacing: 6) {
             ZStack {
@@ -236,9 +241,7 @@ private struct BestiaryCell: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(entry == nil
-            ? "尚未遇见的怪物，\(monster.element.rawValue)属性"
-            : "\(monster.rawValue)，\(monster.element.rawValue)属性，遭遇\(entry.encounters)次，胜\(entry.wins)次")
+        .accessibilityLabel(accessibilityText)
     }
 }
 

@@ -1,6 +1,34 @@
 import PingIslandKit
 import SwiftUI
 
+import PingIslandKit
+import SwiftUI
+
+// MARK: - 美术资产键解析（内容库 → Imageset）
+
+/// 卡面立绘键统一入口：内容库缺失时全部返回 nil，调用方自行降级（emoji / SF Symbol）。
+enum CardArt {
+    /// 职业立绘键；未觉醒（className 无法映射职业）返回 nil（调用方可用 appIconKey 占位）
+    static func classArtKey(className: String) -> String? {
+        guard let cls = CharacterClass(rawValue: className) else { return nil }
+        return ContentLibrary.shared?.classArt(cls)
+    }
+
+    /// 装备立绘键：部位中文 + 外观类型中文 → 内容库 imageset 名
+    static func equipmentArtKey(slot: String, appearance: String) -> String? {
+        guard let slot = EquipmentSlot(rawValue: slot) else { return nil }
+        let tier: AppearanceTier
+        switch appearance {
+        case "皮甲": tier = .leather
+        case "铁甲": tier = .iron
+        case "机甲": tier = .mech
+        default: tier = .cloth
+        }
+        return ContentLibrary.shared?.equipmentIcon(slot: slot, tier: tier)
+    }
+}
+
+
 // MARK: - 闪卡档位（对外 API 保持不变）
 
 /// 闪卡效果档位（基础映射）：
