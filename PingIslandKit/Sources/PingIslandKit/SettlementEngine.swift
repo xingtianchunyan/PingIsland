@@ -83,11 +83,16 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
     public private(set) var skillCollection = SkillCollection()
     /// 按日聚合的成长数据（日记页"屏幕使用时间"周视图用；旧存档缺省为空表）
     public private(set) var dayStats: [String: DayStats] = [:]
+    /// 每升 1 级成长的千分位累计（规则 v3.1：职业系数 × 1 点/级，跨段保留余量；旧存档缺省 0）
+    private var wisLevelMilli: Int64 = 0
+    /// 已入账的等级智慧点数（wisLevelMilli/1000 的快照，避免重复入账）
+    private var wisLevelApplied: Int = 0
 
     private enum CodingKeys: String, CodingKey {
         case growth, baseAttributes, equipment, equipped, diary, processedEventIDs
         case segments, classState, characterSeed, appliedThreshold
         case observationMinutes, observationDays, skillCollection, dayStats
+        case wisLevelMilli, wisLevelApplied
     }
 
     /// 旧版本 state JSON 没有 skillCollection 键：解码时按空收藏兼容，其余字段照原要求
@@ -108,6 +113,8 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
         skillCollection = try c.decodeIfPresent(SkillCollection.self, forKey: .skillCollection)
             ?? SkillCollection()
         dayStats = try c.decodeIfPresent([String: DayStats].self, forKey: .dayStats) ?? [:]
+        wisLevelMilli = try c.decodeIfPresent(Int64.self, forKey: .wisLevelMilli) ?? 0
+        wisLevelApplied = try c.decodeIfPresent(Int.self, forKey: .wisLevelApplied) ?? 0
     }
 
     public var level: Int64 { growth.level }
@@ -201,17 +208,12 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
         segment = segments[event.localDate] ?? segment
         let dice = segment.dice?.value ?? 10
 
-        // 5. 每分钟成长（真机反馈第二十批规则 v3）：恢复职业成长体系
-        // = 新增分钟 × 骰点/10 × 职业系数（流浪者全组 +3%，其它觉醒职业 +10%，未觉醒 1.0）；100 XP/级
+        // 5. 每分钟经验（真机反馈第二十批规则 v3.1）：固定 1 XP/分钟，
+        // 不乘骰点、不乘职业系数（骰点只作用于活动结算与掉落，职业系数见第 7 步每级成长）
         var dayMilli: Int64 = 0
         if newMinutes > 0 {
-            let factor: GrowthFactor
-            if let cls = classState {
-                factor = (cls == .ranger) ? .ranger : .matched
-            } else {
-                factor = .neutral
-            }
-            dayMilli += growth.settle(minutes: newMinutes, dice: dice, factor: factor)
+            // dice=10、neutral → milli = 分钟 × 10 × 100 × 10 × 10 / 100 = 分钟 × 1000 = 1 XP/分钟
+            dayMilli += growth.settle(minutes: newMinutes, dice: 10, factor: .neutral)
         }
 
         // 6. 每满 30 分钟一次活动结算（规则 v3）：经验加成 30×骰点/10 +
@@ -251,13 +253,26 @@ public struct SettlementEngine: Equatable, Codable, Sendable {
             }
         }
 
-        // 7. 等级推进：规则 v1.1 基础智慧 = 初始智慧 +（等级 − 1），按本事件前后等级差补点
+        // 7. 等级推进：100 XP/级；每升 1 级成长（规则 v3.1）= 1 点基础智慧 × 职业系数，
+        // 千分位定点累计（matched 每级 +1.10、ranger 每级 +1.03、neutral 每级 +1.00，余量跨段保留）
         if dayMilli > 0 {
             delta.growthMilliApplied = dayMilli
             delta.newMinutes = newMinutes
             let newLevel = growth.level
             let oldLevel = 1 + (growth.totalMilli - dayMilli) / 100_000
-            baseAttributes[.wis, default: 0] += Int(newLevel - oldLevel)
+            if newLevel > oldLevel {
+                let wisFactor: GrowthFactor
+                if let cls = classState {
+                    wisFactor = (cls == .ranger) ? .ranger : .matched
+                } else {
+                    wisFactor = .neutral
+                }
+                wisLevelMilli += (newLevel - oldLevel) * 1000 * Int64(wisFactor.numerator)
+                    / Int64(wisFactor.denominator)
+                let wisApplied = Int(wisLevelMilli / 1000)
+                baseAttributes[.wis, default: 0] += wisApplied - wisLevelApplied
+                wisLevelApplied = wisApplied
+            }
             // 按日聚合（周视图）：同日多事件累加，等级增量按本段前后差计
             var ds = dayStats[event.localDate] ?? DayStats()
             ds.minutes += newMinutes
