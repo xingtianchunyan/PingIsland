@@ -70,6 +70,13 @@ public enum EquipmentRules {
         return generate(id: id, slot: slot, rarity: rarity, rng: &rng)
     }
 
+    /// 随机部位 + 指定外观生成（第二十一批活动结算用）：部位从全部位等概率抽
+    public static func generate(id: Int, rarity: Rarity, appearance: String,
+                                rng: inout some RandomSource) -> EquipmentItem {
+        let slot = EquipmentSlot.allCases[rng.nextInt(upperBound: EquipmentSlot.allCases.count)]
+        return generate(id: id, slot: slot, rarity: rarity, appearance: appearance, rng: &rng)
+    }
+
     /// 指定部位生成（第二十批调试注入用）：词条仍按品质表从固定池不重复抽取
     public static func generate(id: Int, slot: EquipmentSlot, rarity: Rarity,
                                 rng: inout some RandomSource) -> EquipmentItem {
