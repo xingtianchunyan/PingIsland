@@ -1,9 +1,6 @@
 import PingIslandKit
 import SwiftUI
 
-import PingIslandKit
-import SwiftUI
-
 // MARK: - 美术资产键解析（内容库 → Imageset）
 
 /// 卡面立绘键统一入口：内容库缺失时全部返回 nil，调用方自行降级（emoji / SF Symbol）。
