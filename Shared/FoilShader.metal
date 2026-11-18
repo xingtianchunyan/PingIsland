@@ -4,6 +4,7 @@
 // 全部为视角纯函数：静止零重绘，拖拽/倾斜时随帧变化。
 
 #include <metal_stdlib>
+#include <SwiftUI/SwiftUI_Metal.h>
 using namespace metal;
 
 namespace Foil {
