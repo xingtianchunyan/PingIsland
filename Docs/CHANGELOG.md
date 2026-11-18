@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## 2026-11-18 holo-card v4：Metal 箔面 shader（对标 kimi 宝可梦全息卡案例光学）
+- 真机反馈：激光/原子/镜面纹路不对味、金属烫印与局部UV无感、中央角色被特效糊住——
+  根因是 Canvas 程序化纹路达不到真卡工艺观感；改为移植 kimi 精选案例
+  「宝可梦全息卡片」（k3-pokemon-card.ok.kimi.link）的 WebGL 光学实现
+- 新增 `Shared/FoilShader.metal`（SwiftUI .layerEffect，iOS 18 部署目标可用）：
+  ① 两层交叉衍射光栅（反解光栅方程逐阶取精确波长 + CIE1931 配色 + 闪耀包络）；
+  ② 参考案例八种镭射工艺：平滑箔面/细丝拉丝/柱状光束/交叉网纹/碎冰/闪粉/水波/猫眼
+  （我们的 6 纹路映射：镜面=拉丝、激光=柱光、碎冰、原子=闪粉、波浪=水波）；
+  ③ 银底解析环境（灰房 + 跟随光源的窄金属亮带——金属烫印可感）；
+  ④ 星光层（压印星形微光栅，十字闪光随视角迁移）；
+  ⑤ 油墨调制合成：暗部印刷区保持清晰（中央角色不再被糊住）+ softClip 防死白
+- 遮罩体系：银边/金边 = 仅边缘环带；局部UV = 画窗哑光；
+  角色卡中央立绘大区 + 底部信息带永久哑光（FoilCardKind 预设，角色卡/装备卡各自调）
+- 删除 v3 的 Canvas 纹路机（CrackedIce/Chrome/Wave/Atomic/Laser/两种 Sheen/HoloOptics/
+  SpecularLobe/ArtCutoutShape），HoloSurface 重写为通用内容包装（调用点：角色卡、MTG 装备卡）；
+  金雨保留（Fract/HoloOptics 精简版补回）
+- 调试面板与实验台 API 不变：纹路/光泽/色调/整卡开关全部映射到 shader 参数
+
 ## 2026-11-18 holo-card v3（QwenWork 光学算法升级，单文件合入）
 - `Shared/HoloCardKit.swift` 替换为 v3 实现（调用方零改动，对外 API 不变）：
   ① 时间动画 → 物理渲染：删除全部 phase 时间相位与 TimelineView，纹路/光泽成为视角纯函数

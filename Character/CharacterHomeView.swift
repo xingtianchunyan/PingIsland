@@ -117,34 +117,37 @@ private struct CharacterSportsCard: View {
                             .stroke(MetallicStamp.emboss.opacity(0.6), lineWidth: 1)
                             .padding(width * 0.016)
                     }
-                    // 立绘铺满整卡 + 金雨
-                    cardFaceArt(width: width)
+                    // 箔面卡身：立绘铺满整卡 + 金雨 + 底部信息带（Metal 箔面 shader，
+                    // 中央立绘区与底部信息带自动哑光，角色永不被特效糊住）
+                    HoloSurface(effect: fx, cardKind: .character) {
+                        ZStack {
+                            cardFaceArt(width: width)
+                            // 底部信息带：左侧职业/等级/风味行（靠左）+ 右下雷达
+                            VStack {
+                                Spacer()
+                                HStack(alignment: .bottom, spacing: 4) {
+                                    leftInfo(width: width)
+                                        .padding(.leading, width * 0.05)
+                                    Spacer(minLength: 0)
+                                    // 六维雷达：卡面右下，不遮挡立绘中心
+                                    RadarChart(values: radarValues, labels: radarKeys,
+                                               maxValue: radarMax, tint: .white, grid: .white)
+                                        .frame(width: width * 0.42, height: width * 0.42)
+                                        .padding(.trailing, width * 0.04)
+                                        .padding(.bottom, width * 0.03)
+                                }
+                                .background(
+                                    LinearGradient(colors: [.clear, .black.opacity(0.72)],
+                                                   startPoint: .top, endPoint: .bottom)
+                                        .frame(height: width * 0.52),
+                                    alignment: .bottom
+                                )
+                            }
+                        }
                         .clipShape(RoundedRectangle(cornerRadius: corner * 0.8))
                         .padding(width * 0.02)
-                    // 底部信息带：左侧职业/等级/风味行（靠左）+ 右下雷达
-                    VStack {
-                        Spacer()
-                        HStack(alignment: .bottom, spacing: 4) {
-                            leftInfo(width: width)
-                                .padding(.leading, width * 0.05)
-                            Spacer(minLength: 0)
-                            // 六维雷达：卡面右下，不遮挡立绘中心
-                            RadarChart(values: radarValues, labels: radarKeys,
-                                       maxValue: radarMax, tint: .white, grid: .white)
-                                .frame(width: width * 0.42, height: width * 0.42)
-                                .padding(.trailing, width * 0.04)
-                                .padding(.bottom, width * 0.03)
-                        }
-                        .background(
-                            LinearGradient(colors: [.clear, .black.opacity(0.72)],
-                                           startPoint: .top, endPoint: .bottom)
-                                .frame(height: width * 0.52),
-                            alignment: .bottom
-                        )
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: corner * 0.8))
-                    .padding(width * 0.02)
-                    // d20 骰子：右上角，卡面内容的一部分，点击滚动
+                    // d20 骰子：右上角，卡面内容的一部分，点击滚动（不参与箔面，保持象牙本色）
                     VStack {
                         HStack {
                             Spacer()
@@ -157,8 +160,6 @@ private struct CharacterSportsCard: View {
                         Spacer()
                     }
                     .padding(width * 0.02)
-                    // holo v2 特效覆层（整卡 or 仅边缘描边）
-                    surfaceLayer(corner: corner, width: width)
                 }
             }
             .aspectRatio(0.68, contentMode: .fit)
@@ -169,22 +170,6 @@ private struct CharacterSportsCard: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("角色卡：\(snapshot.className)，等级\(snapshot.level)，骰子\(shownDice)点。轻点骰子滚动，拖动可翻转卡牌。")
-    }
-
-    // MARK: - 特效覆层（holo v2）
-
-    /// 整卡：覆层裁剪进卡面；仅边缘：限制在边框描边内
-    @ViewBuilder
-    private func surfaceLayer(corner: CGFloat, width: CGFloat) -> some View {
-        if fx.fullFace {
-            HoloSurface(effect: fx)
-                .clipShape(RoundedRectangle(cornerRadius: corner * 0.8))
-                .padding(width * 0.02)
-        } else {
-            HoloSurface(effect: fx)
-                .mask(RoundedRectangle(cornerRadius: corner)
-                    .stroke(lineWidth: max(3, width * 0.024)))
-        }
     }
 
     // MARK: - 卡面分区
