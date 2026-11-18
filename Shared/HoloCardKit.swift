@@ -246,24 +246,24 @@ struct HoloSurface<Content: View>: View {
             let aw = cardKind.artWindow
             content()
                 .layerEffect(ShaderLibrary.default.foilEffect(
-                    float2(w, h),
-                    float2(Float(tilt.width), Float(tilt.height)),
-                    float3(-0.45, -0.55, 0.70),          // 固定光源（左上前方 45°）
-                    patternBit,
-                    1.0,                                  // 工艺尺度
-                    1.0,                                  // 工艺强度
-                    effect.glosses.contains(.holographic) ? 1.35 : 0.9,   // 曝光
-                    effect.glosses.contains(.radialSheen) ? 1.2 : 0.75,   // 星光
-                    effect.glosses.contains(.radialSheen) ? 0.9 : 0.45,   // 第二层光栅
-                    0.15,                                 // 角度扩散
-                    effect.glosses.contains(.metallicFoil) ? 1.0 : 0.0,     // 拉丝拉伸
-                    effect.glosses.contains(.metallicFoil) ? 1.5 : 0.6,   // 金属亮带强度
-                    effect.tint == .gold ? 1.0 : 0.0,     // 金属色调
-                    effect.fullFace ? 0.0 : 1.0,          // 仅边缘（银边/金边）
-                    0.11,                                 // 边缘环带宽
-                    float4(Float(aw.x), Float(aw.y), Float(aw.w), Float(aw.h)),
-                    0.035,                                // 画窗柔边
-                    Float(cardKind.matteBottom)           // 底部哑光带
+                    .float2(CGFloat(w), CGFloat(h)),
+                    .float2(tilt.width, tilt.height),
+                    .float3(-0.45, -0.55, 0.70),          // 固定光源（左上前方 45°）
+                    .float(CGFloat(patternBit)),
+                    .float(1.0),                           // 工艺尺度
+                    .float(1.0),                           // 工艺强度
+                    .float(effect.glosses.contains(.holographic) ? 1.35 : 0.9),   // 曝光
+                    .float(effect.glosses.contains(.radialSheen) ? 1.2 : 0.75),   // 星光
+                    .float(effect.glosses.contains(.radialSheen) ? 0.9 : 0.45),   // 第二层光栅
+                    .float(0.15),                          // 角度扩散
+                    .float(effect.glosses.contains(.metallicFoil) ? 1.0 : 0.0),   // 拉丝拉伸
+                    .float(effect.glosses.contains(.metallicFoil) ? 1.5 : 0.6),     // 金属亮带强度
+                    .float(effect.tint == .gold ? 1.0 : 0.0),   // 金属色调
+                    .float(effect.fullFace ? 0.0 : 1.0),   // 仅边缘（银边/金边）
+                    .float(0.11),                          // 边缘环带宽
+                    .float4(aw.x, aw.y, aw.w, aw.h),
+                    .float(0.035),                         // 画窗柔边
+                    .float(cardKind.matteBottom)           // 底部哑光带
                 ), maxSampleOffset: .zero)
         }
     }
