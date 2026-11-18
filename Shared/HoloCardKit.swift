@@ -1,11 +1,12 @@
 import PingIslandKit
+import simd
 import SwiftUI
 
 // MARK: - 美术资产键解析（内容库 → Imageset）
 
 /// 卡面立绘键统一入口：内容库缺失时全部返回 nil，调用方自行降级（emoji / SF Symbol）。
 enum CardArt {
-    /// 职业立绘键；未觉醒（className 无法映射职业）返回 nil（调用方可用 appIconKey 占位）
+    /// 职业立绘键；未觉醒（className 无法映射职业）返回 nil
     static func classArtKey(className: String) -> String? {
         guard let cls = CharacterClass(rawValue: className) else { return nil }
         return ContentLibrary.shared?.classArt(cls)
@@ -32,8 +33,8 @@ enum CardArt {
 /// - plain：普通卡面
 /// - silverEdge：边缘银色闪卡（默认 = 镜面闪 + 金属烫印银）
 /// - goldEdge：边缘金色闪卡（默认 = 波浪闪 + 金属烫印金）
-/// - rainbow：全面彩色闪卡（默认 = 碎冰闪 + 全息镭射 + 全向光流 + 局部UV + 激光闪）
-/// 每档默认组合可在调试面板（卡牌特效实验台）实时覆盖重组。
+/// - rainbow：全面彩色闪卡（默认 = 碎冰闪 + 全息镭射 + 全向光流 + 局部UV）
+/// 调试实验台可实时覆盖重组（HoloEffectLab）。
 enum HoloFoil {
     case plain
     case silverEdge
@@ -61,7 +62,7 @@ enum HoloFoil {
 
 // MARK: - 可组合效果模型（纹路 × 光泽 × 金属色 × 覆盖范围）
 
-/// 折射纹路（卡面的几何图案，单选）
+/// 折射纹路（单选，Canvas 程序化绘制，视角驱动）
 enum RefractionPattern: String, CaseIterable, Identifiable, Codable, Sendable {
     case none = "无纹路"
     case crackedIce = "碎冰闪"      // 碎裂冰块/钻石切面，锋利反光
@@ -74,7 +75,7 @@ enum RefractionPattern: String, CaseIterable, Identifiable, Codable, Sendable {
 
 /// 光泽与物理质感（可多选叠加）
 enum GlossFinish: String, CaseIterable, Identifiable, Codable, Sendable {
-    case holographic = "全息镭射"    // 视角变化七彩渐变（随倾斜变色）
+    case holographic = "全息镭射"    // 视角变化七彩渐变（薄膜干涉，随倾斜变色）
     case radialSheen = "全向光流"    // CD 盘背面的圆形金属折射
     case metallicFoil = "金属烫印"   // 名字/卡框烫金银，凹凸金属感
     case spotUV = "局部UV哑光"      // 立绘区保持哑光，背景与边框闪烁
@@ -95,8 +96,6 @@ struct HoloCardEffect: Equatable, Sendable {
     var tint: MetallicTint = .silver
     /// true = 纹路覆盖整卡（受局部UV约束）；false = 仅边框描边
     var fullFace: Bool = true
-
-    // MARK: 档位默认组合
 
     static let plainDefault = HoloCardEffect()
 
@@ -121,21 +120,68 @@ struct HoloCardEffect: Equatable, Sendable {
     }
 }
 
-// MARK: - 倾斜状态环境（光随视角动：折射物理感）
+// MARK: - 光学基础：光源 / 视角 / 色调映射
+
+/// 光学渲染核心（物理化 v3）：
+/// - 光源固定（左上前方 45°），静止时卡面完全稳定
+/// - 全部变化由视角 V 驱动（V 从 HoloTilt 倾角推导）
+/// - 微面元镜面反射：spec = pow(max(0, N·H), roughness)
+/// - 薄膜干涉色散：hue = f(N·V)（单调映射，无跳变）
+/// - tone mapping：softClip 压制过曝（叠加不死白）
+enum HoloOptics {
+    /// 固定光源方向（左上前方；与美术八轴契约的左上光一致）
+    static let light = simd_normalize(SIMD3<Double>(-0.45, -0.55, 0.70))
+
+    /// 由卡面倾角推导视角向量（物理近似：小角度旋转下的视线方向）
+    /// tilt ∈ [-80, 80]；静止时 = (0,0,1) 正对卡面
+    static func view(tilt: CGSize) -> SIMD3<Double> {
+        let tx = Double(tilt.width) / 80
+        let ty = Double(tilt.height) / 80
+        return simd_normalize(SIMD3<Double>(-tx * 0.9, ty * 0.9,
+                                            1 - 0.25 * (abs(tx) + abs(ty))))
+    }
+
+    /// 半程向量（镜面反射判定）
+    static func half(_ a: SIMD3<Double>, _ b: SIMD3<Double>) -> SIMD3<Double> {
+        simd_normalize(a + b)
+    }
+
+    /// 微面元法线：基础法线(0,0,1) + 固定哈希抖动（每面元恒定，不随时间变）
+    static func facetNormal(_ seed: Int, amplitude: Double = 0.55) -> SIMD3<Double> {
+        let h1 = Fract.hash(seed * 3 + 1)
+        let h2 = Fract.hash(seed * 7 + 2)
+        return simd_normalize(SIMD3<Double>((h1 - 0.5) * 2 * amplitude,
+                                            (h2 - 0.5) * 2 * amplitude, 1))
+    }
+
+    /// 过曝软压（tone mapping）：0.7 以上平滑趋近 1，保留高光边缘色彩过渡
+    static func softClip(_ v: Double) -> Double {
+        v <= 0.7 ? v : 0.7 + 0.3 * (1 - exp(-(v - 0.7) / 0.12))
+    }
+}
+
+/// 哈希/波纹工具
+enum Fract {
+    static func frac(_ v: Double) -> Double { v - v.rounded(.down) }
+    static func hash(_ i: Int) -> Double { frac(sin(Double(i) * 12.9898) * 43758.5453) }
+    static func triangle(_ v: Double) -> Double { 1 - abs((frac(v) * 2) - 1) }
+}
+
+// MARK: - 倾斜状态环境（HoloTilt 向环境广播）
 
 private struct HoloTiltKey: EnvironmentKey {
     static let defaultValue: CGSize = .zero
 }
 
 extension EnvironmentValues {
-    /// 当前 2.5D 倾斜量（-80...80），供覆层计算"视角"（高光偏移、色相旋转）
+    /// 当前 2.5D 倾斜量（-80...80），供覆层推导视角
     var holoTilt: CGSize {
         get { self[HoloTiltKey.self] }
         set { self[HoloTiltKey.self] = newValue }
     }
 }
 
-// MARK: - 2.5D 倾斜交互（小角度翻转，松手回正；向环境广播倾斜量）
+// MARK: - 2.5D 倾斜交互（小角度翻转，松手回正；广播倾斜量）
 
 struct HoloTilt<Content: View>: View {
     var maxAngle: Double = 9
@@ -201,29 +247,26 @@ enum MetallicStamp {
     static let emboss = Color.black.opacity(0.45)
 }
 
-// MARK: - 折射纹路（Canvas 程序化绘制，逐帧由 TimelineView 驱动）
+// MARK: - 折射纹路（全部视角驱动：静止稳定，拖拽时按 N·H 变化）
 
-/// 碎冰闪：不规则三角碎片，每片亮度随相位与视角扫动；rainbow 耦合七彩
+/// 碎冰闪：哈希三角碎片网格；只有法线恰好对上光源的碎片高亮。
+/// 开启全息镭射时碎片色相 = 薄膜干涉（N·V 单调映射）。
 private struct CrackedIcePattern: View {
-    let phase: Double
-    let tilt: CGSize
+    let view: SIMD3<Double>
     var rainbow: Bool = true
     private let cell: CGFloat = 34
 
     var body: some View {
         Canvas { context, size in
+            let half = HoloOptics.half(HoloOptics.light, view)
             let cols = Int(size.width / cell) + 1
             let rows = Int(size.height / cell) + 1
-            let diagLen = Double(size.width + size.height)
-            // 视角偏移：倾斜时光斑反方向移动（折射感）
-            let tiltShift = Double(tilt.width + tilt.height) / 160
             for row in 0...rows {
                 for col in 0...cols {
                     let ox = CGFloat(col) * cell
                     let oy = CGFloat(row) * cell
                     let h1 = Fract.hash(row * 131 + col * 17)
                     let h2 = Fract.hash(row * 57 + col * 211)
-                    // 每格 2~3 片三角碎片，切分方向由哈希决定
                     let midX = ox + cell * (0.3 + CGFloat(h2) * 0.4)
                     let midY = oy + cell * (0.3 + CGFloat(h1) * 0.4)
                     let corners: [CGPoint]
@@ -242,21 +285,20 @@ private struct CrackedIcePattern: View {
                         guard i != 1 || h1 <= 0.5 else { continue }
                         guard i != 3 || h1 > 0.5 else { continue }
                         let shard = Fract.hash(row * 97 + col * 31 + i)
-                        // 扫光：碎片的法线相位 → 明暗三角形波
-                        let sweep = Fract.triangle(phase * 2
-                            + (Double(a.x + a.y) / diagLen) * 2.2
-                            + shard * 0.7 + tiltShift)
-                        let brightness = pow(sweep, 3) * 0.55 + shard * 0.06
-                        guard brightness > 0.02 else { continue }
+                        let n = HoloOptics.facetNormal(row * 461 + col * 89 + i * 7)
+                        let spec = pow(max(0, simd_dot(n, half)), 22)
+                        let brightness = HoloOptics.softClip(spec * 0.65 + shard * 0.04)
+                        guard brightness > 0.03 else { continue }
                         var path = Path()
                         path.move(to: a)
                         path.addLine(to: b)
                         path.addLine(to: CGPoint(x: midX, y: midY))
                         path.closeSubpath()
                         if rainbow {
-                            // 七彩碎片：色相随视角 + 相位 + 碎片哈希
-                            let hue = Fract.frac(phase * 0.5 + shard * 0.35
-                                + tiltShift * 0.3 + Double(a.x) / Double(size.width) * 0.25)
+                            // 薄膜干涉：色相由视角与法线夹角决定（单调、连续、无时间项）
+                            let hue = Fract.frac(0.5
+                                + simd_dot(n, view) * 0.35
+                                + simd_dot(n, HoloOptics.light) * 0.15)
                             context.fill(path, with: .color(
                                 Color(hue: hue, saturation: 0.75, brightness: 1.0)
                                     .opacity(brightness * 0.7)))
@@ -271,96 +313,123 @@ private struct CrackedIcePattern: View {
     }
 }
 
-/// 镜面闪（铬）：锋利彩虹条带 + 掠过的高光带
+/// 镜面闪（铬）：镜面高光带位置 = f(视角)（拖到哪亮到哪，反向扫动）；
+/// 带内彩虹条带随视角平移。
 private struct ChromePattern: View {
-    let phase: Double
-    let tilt: CGSize
+    let view: SIMD3<Double>
 
     var body: some View {
         ZStack {
             Canvas { context, size in
-                let bandHeight: CGFloat = 26
-                let count = Int(size.height / bandHeight) + 2
-                let tiltShift = Double(tilt.width) / 160
-                for i in 0..<count {
-                    let y = CGFloat(i) * bandHeight - bandHeight / 2
-                    let hue = Fract.frac(Double(i) / Double(count) * 1.4
-                        + phase * 1.5 + tiltShift)
-                    let rect = CGRect(x: -2, y: y, width: size.width + 4, height: bandHeight * 0.55)
-                    context.fill(Path(rect), with: .color(
-                        Color(hue: hue, saturation: 0.8, brightness: 1.0).opacity(0.16)))
+                // 视角决定高光带中心（反向：拖拽向右 → 带向左移）
+                let bandCenter = 0.5 - view.x * 0.45
+                let bandY = 0.5 + view.y * 0.35
+                let bandWidth = 0.22
+                let bandHeight = 0.65
+                let rect = CGRect(x: size.width * (bandCenter - bandWidth / 2),
+                                  y: size.height * (bandY - bandHeight / 2),
+                                  width: size.width * bandWidth,
+                                  height: size.height * bandHeight)
+                // 带内彩虹条带（静态纹理；亮度由视角门控）
+                let n = HoloOptics.facetNormal(777, amplitude: 0.25)
+                let half = HoloOptics.half(HoloOptics.light, view)
+                let gate = HoloOptics.softClip(pow(max(0, simd_dot(n, half)), 8) * 0.9 + 0.15)
+                for i in 0..<7 {
+                    let hue = Fract.frac(Double(i) / 7 * 1.2 + view.x * 0.3)
+                    let strip = CGRect(x: rect.minX,
+                                       y: rect.minY + rect.height * CGFloat(i) / 7,
+                                       width: rect.width,
+                                       height: rect.height / 7)
+                    context.fill(Path(strip), with: .color(
+                        Color(hue: hue, saturation: 0.8, brightness: 1.0)
+                            .opacity(gate * 0.28)))
                 }
+                // 镜面核心高光（最强、最窄）
+                let core = rect.insetBy(dx: rect.width * 0.3, dy: rect.height * 0.35)
+                context.fill(Path(roundedRect: core, cornerRadius: core.width * 0.2),
+                             with: .color(.white.opacity(gate * 0.6)))
             }
             .blendMode(.plusLighter)
-            LinearGradient(colors: [.clear, .white.opacity(0.5), .clear],
-                           startPoint: UnitPoint(x: phase * 2.4 - 0.7 + Double(tilt.width) / 200,
-                                                 y: 0),
-                           endPoint: UnitPoint(x: phase * 2.4 + 0.3 + Double(tilt.width) / 200,
-                                               y: 1))
+            // 环境底光（极弱、固定方向，保证任何角度都有"铬存在感"）
+            LinearGradient(colors: [Color(white: 0.9).opacity(0.10), .clear,
+                                    Color(white: 0.7).opacity(0.06)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
                 .blendMode(.plusLighter)
         }
     }
 }
 
-/// 波浪闪：丝缎/水波光流（多条正弦亮带流动）
+/// 波浪闪：绸缎光流；每段亮带亮度 = 段法线与半程向量夹角（拖拽时亮带沿波移动）
 private struct WavePattern: View {
-    let phase: Double
-    let tilt: CGSize
+    let view: SIMD3<Double>
     var tint: Color = Color(red: 0.9, green: 0.72, blue: 0.3)
 
     var body: some View {
         Canvas { context, size in
+            let half = HoloOptics.half(HoloOptics.light, view)
             let bands = 9
             let amplitude = size.height * 0.05
-            let tiltShift = Double(tilt.width) / 200
             for k in 0..<bands {
                 let progress = Double(k) / Double(bands)
-                var path = Path()
-                path.move(to: CGPoint(x: -4, y: -4))
+                var points: [CGPoint] = []
                 let steps = 24
                 for s in 0...steps {
                     let x = size.width * CGFloat(s) / CGFloat(steps)
-                    let angle = Double(s) / Double(steps) * Double.pi * 2
-                        + phase * Double.pi * 3 + progress * 5.0 + tiltShift * 3
-                    let wave = sin(angle)
-                    let bandY = size.height * CGFloat(0.5 + (progress - 0.5) * 0.9)
-                    let y = bandY + CGFloat(wave) * amplitude
-                    path.addLine(to: CGPoint(x: x, y: y))
+                    let wave = sin(Double(s) / Double(steps) * Double.pi * 2 + progress * 5.0)
+                    let y = size.height * (0.5 + (progress - 0.5) * 0.9)
+                        + CGFloat(wave) * amplitude
+                    points.append(CGPoint(x: x, y: y))
                 }
-                path.addLine(to: CGPoint(x: size.width + 4, y: -4))
-                path.closeSubpath()
-                let sweep = Fract.triangle(phase * 1.5 + progress * 1.2 + tiltShift)
-                context.stroke(path, with: .color(
-                    tint.opacity(0.35 * sweep + 0.08)), lineWidth: 2.4)
+                // 每段按局部斜率法线算镜面亮度（分 4 段采样）
+                for seg in 0..<4 {
+                    let i0 = points.count * seg / 4
+                    let i1 = points.count * (seg + 1) / 4 - 1
+                    guard i0 < i1 else { continue }
+                    let dx = points[i1].x - points[i0].x
+                    let dy = points[i1].y - points[i0].y
+                    let len = max(0.001, (dx * dx + dy * dy).squareRoot())
+                    let slopeX = Double(dy / len)
+                    let slopeY = -Double(dx / len)
+                    let n = simd_normalize(SIMD3<Double>(slopeX * 0.6, slopeY * 0.6, 1))
+                    let spec = HoloOptics.softClip(pow(max(0, simd_dot(n, half)), 14) * 0.7)
+                    let alpha = 0.05 + spec * 0.5
+                    guard alpha > 0.06 else { continue }
+                    // 重建该段的子路径
+                    var sub = Path()
+                    sub.move(to: CGPoint(x: -4, y: -4))
+                    for idx in i0...i1 { sub.addLine(to: points[idx]) }
+                    sub.addLine(to: CGPoint(x: points[i1].x, y: -4))
+                    sub.closeSubpath()
+                    context.stroke(sub, with: .color(tint.opacity(alpha)), lineWidth: 2.4)
+                }
             }
         }
         .blendMode(.plusLighter)
     }
 }
 
-/// 原子闪：细密小方块颗粒闪烁（低调科技感）
+/// 原子闪：方块点阵；每块法线固定 → 特定视角下特定方块群点亮（静态、确定性）
 private struct AtomicPattern: View {
-    let phase: Double
-    let tilt: CGSize
+    let view: SIMD3<Double>
     private let cell: CGFloat = 15
 
     var body: some View {
         Canvas { context, size in
+            let half = HoloOptics.half(HoloOptics.light, view)
             let cols = Int(size.width / cell)
             let rows = Int(size.height / cell)
-            let tiltShift = Double(tilt.width + tilt.height) / 200
             for row in 0...rows {
                 for col in 0...cols {
                     let h = Fract.hash(row * 53 + col * 127)
-                    let flicker = phase * Double.pi * 4
-                        + Double(row + col) * 0.7 + h * 6.0 + tiltShift * 4
-                    let sparkle = pow(max(0, sin(flicker)), 12)
-                    guard sparkle > 0.03 else { continue }
+                    let n = HoloOptics.facetNormal(row * 311 + col * 67, amplitude: 0.7)
+                    let spec = HoloOptics.softClip(pow(max(0, simd_dot(n, half)), 12))
+                    let alpha = spec * (0.35 + h * 0.45)
+                    guard alpha > 0.05 else { continue }
                     let side = cell * (0.45 + CGFloat(h) * 0.3)
                     let rect = CGRect(x: CGFloat(col) * cell + (cell - side) / 2,
                                       y: CGFloat(row) * cell + (cell - side) / 2,
                                       width: side, height: side)
-                    context.fill(Path(rect), with: .color(.white.opacity(sparkle * 0.75)))
+                    context.fill(Path(rect), with: .color(.white.opacity(alpha)))
                 }
             }
         }
@@ -368,169 +437,157 @@ private struct AtomicPattern: View {
     }
 }
 
-/// 激光闪：十字扫光线 + 放射折线
+/// 激光闪：十字线 + 放射折线；只在特定视角点亮（对角度极敏感 = 激光感）
 private struct LaserPattern: View {
-    let phase: Double
-    let tilt: CGSize
+    let view: SIMD3<Double>
 
     var body: some View {
         Canvas { context, size in
-            let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            let tiltShift = Double(tilt.width) / 160
-            // 十字线：一条随相位扫动，另一条固定对角
-            let sweepX = size.width * CGFloat(Fract.triangle(phase * 2 + tiltShift))
+            let half = HoloOptics.half(HoloOptics.light, view)
+            // 十字线：法线随视角连续变化 → 只有某视角区间亮
+            let nV = simd_normalize(SIMD3<Double>(view.x * 0.5, 0, 1))
+            let nH = simd_normalize(SIMD3<Double>(0, view.y * 0.5, 1))
+            let gateV = HoloOptics.softClip(pow(max(0, simd_dot(nV, half)), 18))
+            let gateH = HoloOptics.softClip(pow(max(0, simd_dot(nH, half)), 18))
             var cross = Path()
-            cross.move(to: CGPoint(x: sweepX, y: 0))
-            cross.addLine(to: CGPoint(x: sweepX, y: size.height))
-            cross.move(to: CGPoint(x: 0, y: size.height * CGFloat(Fract.triangle(phase * 2 + 0.5))))
-            cross.addLine(to: CGPoint(x: size.width, y: size.height * CGFloat(Fract.triangle(phase * 2 + 0.5))))
+            let x = size.width * (0.5 - view.x * 0.3)
+            let y = size.height * (0.5 + view.y * 0.3)
+            cross.move(to: CGPoint(x: x, y: 0))
+            cross.addLine(to: CGPoint(x: x, y: size.height))
+            cross.move(to: CGPoint(x: 0, y: y))
+            cross.addLine(to: CGPoint(x: size.width, y: y))
             context.stroke(cross, with: .linearGradient(
-                Gradient(colors: [.white.opacity(0.75), .white.opacity(0.25), .white.opacity(0.7)]),
+                Gradient(colors: [.white.opacity(gateV * 0.8), .white.opacity(gateH * 0.8),
+                                  .white.opacity(gateV * 0.7)]),
                 startPoint: .zero, endPoint: CGPoint(x: size.width, y: size.height)),
                 lineWidth: 1.6)
-            // 放射折线：8 条短射线绕中心旋转
-            let rotation = phase * 2 * Double.pi * 2 + tiltShift * 2
+            // 放射折线：中心随视角偏移，亮度按径向法线
+            let center = CGPoint(x: size.width * (0.5 - view.x * 0.2),
+                                 y: size.height * (0.5 + view.y * 0.2))
             for i in 0..<8 {
-                let angle = rotation + Double(i) * Double.pi / 4
+                let angle = Double(i) * Double.pi / 4
+                let n = HoloOptics.facetNormal(i * 43 + 5, amplitude: 0.4)
+                let gate = HoloOptics.softClip(pow(max(0, simd_dot(n, half)), 10) * 0.8)
+                guard gate > 0.05 else { continue }
                 let r0 = min(size.width, size.height) * 0.18
-                let r1 = min(size.width, size.height) * (0.55 + 0.1 * sin(Double(i) * 2.1 + phase * 4))
+                let r1 = min(size.width, size.height) * 0.6
                 var ray = Path()
                 ray.move(to: CGPoint(x: center.x + CGFloat(cos(angle)) * r0,
                                      y: center.y + CGFloat(sin(angle)) * r0))
                 ray.addLine(to: CGPoint(x: center.x + CGFloat(cos(angle)) * r1,
                                         y: center.y + CGFloat(sin(angle)) * r1))
-                context.stroke(ray, with: .color(.white.opacity(0.28)), lineWidth: 1.1)
+                context.stroke(ray, with: .color(.white.opacity(gate)), lineWidth: 1.1)
             }
         }
         .blendMode(.plusLighter)
     }
 }
 
-/// 哈希/波纹工具
-private enum Fract {
-    static func frac(_ v: Double) -> Double { v - v.rounded(.down) }
-    static func hash(_ i: Int) -> Double { frac(sin(Double(i) * 12.9898) * 43758.5453) }
-    static func triangle(_ v: Double) -> Double { 1 - abs((frac(v) * 2) - 1) }
-}
+// MARK: - 光泽层（视角驱动）
 
-// MARK: - 光泽层
-
-/// 全息镭射：色相随视角（倾斜）+ 时间旋转的七彩（红橙黄绿青蓝紫）
+/// 全息镭射（薄膜干涉）：色相随视角连续单调移动，静止时定格
 private struct HolographicSheen: View {
-    let phase: Double
-    let tilt: CGSize
+    let view: SIMD3<Double>
 
     var body: some View {
-        let tiltHue = Double(tilt.width) / 160
+        let vx = view.x
+        let vy = view.y
         LinearGradient(colors: [
-            Color(hue: Fract.frac(0.0 + phase * 0.6 + tiltHue), saturation: 0.8, brightness: 1),
-            Color(hue: Fract.frac(0.15 + phase * 0.6 + tiltHue), saturation: 0.8, brightness: 1),
-            Color(hue: Fract.frac(0.33 + phase * 0.6 + tiltHue), saturation: 0.8, brightness: 1),
-            Color(hue: Fract.frac(0.5 + phase * 0.6 + tiltHue), saturation: 0.8, brightness: 1),
-            Color(hue: Fract.frac(0.66 + phase * 0.6 + tiltHue), saturation: 0.8, brightness: 1),
-            Color(hue: Fract.frac(0.83 + phase * 0.6 + tiltHue), saturation: 0.8, brightness: 1),
-        ], startPoint: UnitPoint(x: phase, y: 0), endPoint: UnitPoint(x: 1 - phase, y: 1))
+            Color(hue: Fract.frac(0.00 + vx * 0.25 + vy * 0.1), saturation: 0.8, brightness: 1),
+            Color(hue: Fract.frac(0.17 + vx * 0.25 + vy * 0.1), saturation: 0.8, brightness: 1),
+            Color(hue: Fract.frac(0.33 + vx * 0.25 + vy * 0.1), saturation: 0.8, brightness: 1),
+            Color(hue: Fract.frac(0.50 + vx * 0.25 + vy * 0.1), saturation: 0.8, brightness: 1),
+            Color(hue: Fract.frac(0.66 + vx * 0.25 + vy * 0.1), saturation: 0.8, brightness: 1),
+            Color(hue: Fract.frac(0.83 + vx * 0.25 + vy * 0.1), saturation: 0.8, brightness: 1),
+        ], startPoint: UnitPoint(x: 0.5 - vx * 0.5, y: 0),
+           endPoint: UnitPoint(x: 0.5 + vx * 0.5, y: 1))
             .blendMode(.plusLighter)
-            .opacity(0.22)
+            .opacity(0.20)   // tone map：全息层强度上限，防叠白
     }
 }
 
-/// 全向光流：CD 盘背面的圆形金属折射（角度随时间与视角旋转）
+/// 全向光流（CD）：折射角度 = f(视角)，静止时定格
 private struct RadialSheen: View {
-    let phase: Double
-    let tilt: CGSize
+    let view: SIMD3<Double>
 
     var body: some View {
-        let angle = Angle.degrees(phase * 720 + Double(tilt.width) * 1.5 + Double(tilt.height) * 1.2)
+        let angle = Angle.degrees(view.x * 120 + view.y * 80)
         AngularGradient(colors: [
-            .white.opacity(0.0), .white.opacity(0.3),
-            Color(hue: 0.1, saturation: 0.6, brightness: 1).opacity(0.25),
-            .white.opacity(0.0), Color(hue: 0.55, saturation: 0.6, brightness: 1).opacity(0.25),
-            .white.opacity(0.35), .white.opacity(0.0),
-        ], center: .center, angle: angle)
+            .white.opacity(0.0), .white.opacity(0.28),
+            Color(hue: 0.1, saturation: 0.6, brightness: 1).opacity(0.22),
+            .white.opacity(0.0), Color(hue: 0.55, saturation: 0.6, brightness: 1).opacity(0.22),
+            .white.opacity(0.32), .white.opacity(0.0),
+        ], center: UnitPoint(x: 0.5 - view.x * 0.12, y: 0.5 - view.y * 0.12), angle: angle)
             .blendMode(.plusLighter)
     }
 }
 
-// MARK: - 卡面特效组合器
+// MARK: - 卡面特效组合器（无时间驱动：静止 0fps，拖拽随帧）
 
-/// 依 HoloCardEffect 组合纹路与光泽，逐帧驱动（约 30fps；纯静态组合不进 Timeline）。
-/// 覆盖范围（整卡/仅边缘）由调用方 mask 决定；局部UV（立绘哑光）也由调用方挖洞。
+/// 依 HoloCardEffect 组合纹路与光泽。
+/// v3 物理化：**不含 TimelineView**——所有层是视角的纯函数，
+/// 静止时零重绘（省电），拖拽时由手势帧驱动重绘。
 struct HoloSurface: View {
     let effect: HoloCardEffect
     @Environment(\.holoTilt) private var tilt
 
-    private var needsAnimation: Bool {
-        effect.pattern != .none || !effect.glosses.isDisjoint(with: [.holographic, .radialSheen])
-    }
+    private var view: SIMD3<Double> { HoloOptics.view(tilt: tilt) }
 
     var body: some View {
-        if needsAnimation {
-            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
-                let phase = timeline.date.timeIntervalSinceReferenceDate
-                    .truncatingRemainder(dividingBy: 3.6) / 3.6
-                ZStack {
-                    surface(phase: phase)
-                }
-            }
-        } else {
-            surface(phase: 0)
+        ZStack {
+            surface(view: view)
         }
     }
 
     @ViewBuilder
-    private func surface(phase: Double) -> some View {
-        // 1. 折射纹路
+    private func surface(view: SIMD3<Double>) -> some View {
+        // 1. 折射纹路（层强度预算：纹路 1.0）
         switch effect.pattern {
         case .crackedIce:
-            CrackedIcePattern(phase: phase, tilt: tilt,
+            CrackedIcePattern(view: view,
                               rainbow: effect.glosses.contains(.holographic))
         case .chrome:
-            ChromePattern(phase: phase, tilt: tilt)
+            ChromePattern(view: view)
         case .wave:
-            WavePattern(phase: phase, tilt: tilt,
+            WavePattern(view: view,
                         tint: effect.tint == .gold
                             ? Color(red: 0.9, green: 0.72, blue: 0.3)
                             : Color(white: 0.92))
         case .atomic:
-            AtomicPattern(phase: phase, tilt: tilt)
+            AtomicPattern(view: view)
         case .laser:
-            LaserPattern(phase: phase, tilt: tilt)
+            LaserPattern(view: view)
         case .none:
             EmptyView()
         }
-        // 2. 动态光泽
+        // 2. 动态光泽（层强度预算：光泽共摊 0.7，softClip + 上限防叠加死白）
         if effect.glosses.contains(.holographic) {
-            HolographicSheen(phase: phase, tilt: tilt)
+            HolographicSheen(view: view)
         }
         if effect.glosses.contains(.radialSheen) {
-            RadialSheen(phase: phase, tilt: tilt)
+            RadialSheen(view: view)
         }
-        // 3. 静态高光（纸面微光，plain 也有）
-        LinearGradient(colors: [.white.opacity(0.14), .clear, .white.opacity(0.06)],
-                       startPoint: .topLeading, endPoint: .bottomTrailing)
+        // 3. 静态高光（纸面微光，方向随半程向量，静止时定格）
+        LinearGradient(colors: [.white.opacity(0.12), .clear, .white.opacity(0.05)],
+                       startPoint: UnitPoint(x: 0.1 - view.x * 0.3, y: 0.05),
+                       endPoint: UnitPoint(x: 0.9 - view.x * 0.3, y: 1))
             .blendMode(.plusLighter)
     }
 }
 
-// MARK: - 金色窗雨（运气 ≥ 900，v2：真实雨滴落在玻璃上的质感）
+// MARK: - 金色窗雨（运气 ≥ 900；雨落下是物理允许持续，贴附水珠静止稳定）
 
-/// "金雨落在窗玻璃"三层结构（Canvas + TimelineView，无状态确定性渲染）：
-/// 1. 玻璃光泽层：斜向金色光泽缓慢流动 + 掠过的柔光带（窗面湿润感）
-/// 2. 贴附水珠层：数十颗静态小雨珠，径向渐变呈现凸透镜质感
-///    （左上金色高光 → 半透明金体 → 底部暗边），峰值时闪出十字星芒
-/// 3. 滑落雨痕层：速度各异的雨痕，水滴头（径向高光泪滴）+ 湿拖尾（渐隐金痕），
-///    顶部淡入底部淡出，正弦横向摆动模拟水珠沿玻璃蠕动的路径
+/// v3 纪律修正：贴附水珠**不再随时间闪烁**（每颗亮度固定）；
+/// 滑落雨痕持续下落（物理行为），速度各异的蠕动 + 摆动保留。
+/// （屏幕级 3D 雨与折射 shader 属第二阶段，将整体替换本组件。）
 struct GoldRain: View {
-    /// 滑落雨痕数量（兼容旧参数；静态水珠数量固定约 90 颗）
     var dropCount: Int = 30
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
             Canvas { context, size in
                 let t = timeline.date.timeIntervalSinceReferenceDate
-                drawGlassSheen(context: context, size: size, t: t)
-                drawStaticDroplets(context: context, size: size, t: t)
+                drawStaticDroplets(context: context, size: size)
                 drawSlidingStreaks(context: context, size: size, t: t)
             }
         }
@@ -538,93 +595,47 @@ struct GoldRain: View {
         .accessibilityHidden(true)
     }
 
-    // MARK: 1. 玻璃光泽（湿润窗面的整体氛围）
-
-    private func drawGlassSheen(context: GraphicsContext, size: CGSize, t: Double) {
-        let drift = Fract.frac(t * 0.05)
-        // 斜向金色湿光（随时间极缓慢流动）
-        context.fill(Path(CGRect(origin: .zero, size: size)), with: .linearGradient(
-            Gradient(colors: [
-                Color(red: 1.0, green: 0.85, blue: 0.45).opacity(0.10),
-                .clear,
-                Color(red: 0.9, green: 0.65, blue: 0.2).opacity(0.08),
-                .clear,
-            ]),
-            startPoint: CGPoint(x: size.width * CGFloat(drift) - size.width * 0.3, y: 0),
-            endPoint: CGPoint(x: size.width * CGFloat(drift) + size.width * 0.5, y: size.height)))
-        // 掠过的柔光带（模拟窗前光源经过）
-        let sweep = CGFloat(Fract.triangle(t * 0.08))
-        let bandX = size.width * (sweep * 1.4 - 0.2)
-        let bandWidth = size.width * 0.35
-        context.fill(Path(CGRect(origin: .zero, size: size)), with: .linearGradient(
-            Gradient(colors: [.clear, Color(red: 1.0, green: 0.92, blue: 0.6).opacity(0.12), .clear]),
-            startPoint: CGPoint(x: bandX, y: 0),
-            endPoint: CGPoint(x: bandX + bandWidth, y: size.height)))
-    }
-
-    // MARK: 2. 贴附水珠（静态，凸透镜质感 + 星芒闪烁）
-
-    private func drawStaticDroplets(context: GraphicsContext, size: CGSize, t: Double) {
+    // 贴附水珠：静态（亮度由哈希固定，无时间项）
+    private func drawStaticDroplets(context: GraphicsContext, size: CGSize) {
         let staticCount = 90
         for i in 0..<staticCount {
-            let sx = Fract.hash(i * 3 + 1)                    // 0..1
+            let sx = Fract.hash(i * 3 + 1)
             let sy = Fract.hash(i * 7 + 2)
-            let scale = 0.5 + Fract.hash(i * 11 + 5)          // 大小分层
-            let r = (1.6 + scale * 4.2) * (size.width / 300)  // 随卡宽缩放
+            let scale = 0.5 + Fract.hash(i * 11 + 5)
+            let r = (1.6 + scale * 4.2) * (size.width / 300)
             let x = sx * size.width
             let y = sy * size.height
-            // 每颗独立闪烁相位（峰值亮、谷值暗，但始终可见）
-            let twinkle = 0.35 + 0.65 * (0.5 + 0.5 * sin(t * Double.pi * 2
-                * (0.4 + Fract.hash(i * 13 + 7) * 0.8) + Double(i) * 2.4))
-            let bodyAlpha = 0.28 + 0.30 * twinkle
-            // 水珠本体：径向渐变（左上高光 → 金体 → 右下暗缘）
+            let bodyAlpha = 0.30 + 0.25 * scale   // 固定，不闪烁
             let rect = CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)
             let body = Path(ellipseIn: rect)
             context.fill(body, with: .radialGradient(
                 Gradient(colors: [
-                    Color(red: 1.0, green: 0.95, blue: 0.7).opacity(bodyAlpha + 0.25),
+                    Color(red: 1.0, green: 0.95, blue: 0.7).opacity(HoloOptics.softClip(bodyAlpha + 0.25)),
                     Color(red: 0.95, green: 0.75, blue: 0.25).opacity(bodyAlpha * 0.8),
                     Color(red: 0.55, green: 0.35, blue: 0.08).opacity(bodyAlpha * 0.45),
                 ]),
                 center: CGPoint(x: x - r * 0.35, y: y - r * 0.35),
                 startRadius: 0, endRadius: r * 1.4))
-            // 底缘接触阴影（贴附感）
             context.stroke(body, with: .color(Color(red: 0.45, green: 0.28, blue: 0.05)
-                .opacity(0.25 + 0.15 * twinkle)), lineWidth: 0.8)
-            // 星芒：闪烁峰值时四芒微光
-            let sparkle = pow(twinkle, 4)
-            if sparkle > 0.15 && scale > 0.75 {
-                let arm = r * (1.2 + 0.8 * sparkle)
-                var star = Path()
-                star.move(to: CGPoint(x: x - arm, y: y))
-                star.addLine(to: CGPoint(x: x + arm, y: y))
-                star.move(to: CGPoint(x: x, y: y - arm))
-                star.addLine(to: CGPoint(x: x, y: y + arm))
-                context.stroke(star, with: .color(Color(red: 1.0, green: 0.95, blue: 0.75)
-                    .opacity(sparkle * 0.8)), lineWidth: 0.9)
-            }
+                .opacity(0.28)), lineWidth: 0.8)
         }
     }
 
-    // MARK: 3. 滑落雨痕（拖尾 + 泪滴头 + 摆动）
-
+    // 滑落雨痕：拖尾 + 泪滴头（持续下落 = 物理行为，允许时间驱动）
     private func drawSlidingStreaks(context: GraphicsContext, size: CGSize, t: Double) {
         let span = size.height + 60.0
         for i in 0..<dropCount {
             let seed = Double(i)
-            let sx = Fract.hash(i * 17 + 3)                       // 基准 x
-            let speed = 0.05 + Fract.hash(i * 23 + 9) * 0.14      // 归一化速度/秒（慢速蠕动）
+            let sx = Fract.hash(i * 17 + 3)
+            let speed = 0.05 + Fract.hash(i * 23 + 9) * 0.14
             let progress = Fract.frac(Fract.hash(i * 5 + 13) + t * speed)
             let y = progress * span - 30
-            // 横向摆动：水珠沿玻璃蜿蜒下滑
             let wobble = sin(t * (1.2 + Fract.hash(i * 29 + 1) * 1.5)
                 + seed * 6.28) * (3 + Fract.hash(i * 31 + 4) * 4)
             let x = sx * size.width + CGFloat(wobble)
-            // 顶部/底部淡入淡出
             let fade = min(y / 50, max(0, (size.height - y) / 50), 1)
             guard fade > 0.01 else { continue }
             let strength = 0.2 + 0.6 * fade
-            // 拖尾（湿痕）：头部最亮向后渐隐；速度越快拖尾越长
             let tail = 26.0 + speed * 380.0
             var trail = Path()
             trail.move(to: CGPoint(x: x, y: y - CGFloat(tail)))
@@ -633,23 +644,20 @@ struct GoldRain: View {
                 Gradient(colors: [
                     Color(red: 0.95, green: 0.78, blue: 0.35).opacity(0),
                     Color(red: 0.95, green: 0.78, blue: 0.35).opacity(strength * 0.55),
-                    Color(red: 1.0, green: 0.88, blue: 0.55).opacity(strength * 0.75),
+                    Color(red: 1.0, green: 0.88, blue: 0.55).opacity(HoloOptics.softClip(strength * 0.75)),
                 ]),
                 startPoint: CGPoint(x: x, y: y - CGFloat(tail)),
                 endPoint: CGPoint(x: x, y: y)), lineWidth: 1.6)
-            // 水滴头：泪滴形（圆头 + 上尖尾），径向高光
             let headR = (2.0 + Fract.hash(i * 37 + 6) * 2.2) * (size.width / 300)
             let headRect = CGRect(x: x - headR, y: y - headR, width: headR * 2, height: headR * 2)
-            let head = Path(ellipseIn: headRect)
-            context.fill(head, with: .radialGradient(
+            context.fill(Path(ellipseIn: headRect), with: .radialGradient(
                 Gradient(colors: [
-                    Color(red: 1.0, green: 0.96, blue: 0.75).opacity(strength + 0.2),
+                    Color(red: 1.0, green: 0.96, blue: 0.75).opacity(HoloOptics.softClip(strength + 0.2)),
                     Color(red: 0.98, green: 0.82, blue: 0.4).opacity(strength * 0.85),
                     Color(red: 0.7, green: 0.45, blue: 0.1).opacity(strength * 0.5),
                 ]),
                 center: CGPoint(x: x - headR * 0.3, y: y - headR * 0.3),
                 startRadius: 0, endRadius: headR * 1.3))
-            // 头部高光点
             let dotR = max(0.6, headR * 0.28)
             context.fill(Path(ellipseIn: CGRect(
                 x: x - headR * 0.45 - dotR, y: y - headR * 0.45 - dotR,
@@ -659,19 +667,17 @@ struct GoldRain: View {
     }
 }
 
-// MARK: - 万智牌式卡框（v2：特效组合 + 金属烫印 + 局部UV）
+// MARK: - 万智牌式卡框（v3：双层视差 + 物理化特效）
 
-/// 万智牌布局：标题栏（名 + 右上角"费用"徽章）→ 画框 → 类型行 → 文本框。
-/// - `foil` 决定基础档位（徽章色等）；`effect` 决定纹路×光泽组合（默认按档位映射）
-/// - 金属烫印：名字与卡框用烫金银渐变 + 凹凸内影
-/// - 局部UV：立绘画框保持哑光（纹路/光泽覆层挖洞避开），主体"跃然纸上"
-/// - goldRain 为 true 时画框背景下金雨。
+/// 万智牌布局 v3：
+/// - **双层微视差**：内容层（立绘/文本）与闪膜层（纹路/烫印描边）随 tilt 反向偏移
+///   ±3pt/±2pt——"立绘浮在闪膜上"的水晶封层感（外框不动，内容出血由内边距覆盖）
+/// - 特效组合与局部 UV 同 v2；纹路/光泽全部视角驱动（静止稳定）
+/// - goldRain 为 true 时画框内金雨（贴附水珠已静止化）
 struct MTGCardView<Art: View>: View {
     let name: String
-    /// 右上角徽章文案（如 "Lv.37" / "评 12"）
     let costBadge: String
     let typeLine: String
-    /// 文本框文案（词条/风味语）
     let textBox: String
     let foil: HoloFoil
     var goldRain: Bool = false
@@ -680,31 +686,47 @@ struct MTGCardView<Art: View>: View {
     var effect: HoloCardEffect?
     @ViewBuilder var art: () -> Art
 
+    @Environment(\.holoTilt) private var tilt
+
     private var fx: HoloCardEffect { effect ?? .default(for: foil) }
     private var hasMetallic: Bool { fx.glosses.contains(.metallicFoil) }
+
+    /// 视差量：内容层 +3pt 方向，闪膜层 -2pt 反方向（满倾角时）
+    private var contentParallax: CGSize {
+        CGSize(width: CGFloat(Double(tilt.width) / 80) * 3,
+               height: CGFloat(Double(tilt.height) / 80) * 3)
+    }
+
+    private var foilParallax: CGSize {
+        CGSize(width: CGFloat(Double(tilt.width) / 80) * -2,
+               height: CGFloat(Double(tilt.height) / 80) * -2)
+    }
 
     var body: some View {
         GeometryReader { geo in
             let corner = geo.size.width * 0.045
             let width = geo.size.width
             ZStack {
-                // 外框（卡牌黑边；烫印档加金属描边）
+                // 外框（卡牌黑边；烫印档加金属描边）——固定层
                 RoundedRectangle(cornerRadius: corner)
                     .fill(Color(white: 0.12))
                 if hasMetallic {
                     RoundedRectangle(cornerRadius: corner)
                         .stroke(MetallicStamp.gradient(for: fx.tint), lineWidth: width * 0.012)
                         .padding(width * 0.006)
-                    // 凹凸内影
                     RoundedRectangle(cornerRadius: corner * 0.9)
                         .stroke(MetallicStamp.emboss.opacity(0.6), lineWidth: 1)
                         .padding(width * 0.016)
                 }
-                // 内框（米黄卡纸）
-                RoundedRectangle(cornerRadius: corner * 0.75)
-                    .fill(Color(red: 0.93, green: 0.89, blue: 0.80))
-                    .padding(width * 0.022)
-                // 卡面内容
+                // 闪膜层：内框卡纸 + 特效覆层（反向视差）
+                Group {
+                    RoundedRectangle(cornerRadius: corner * 0.75)
+                        .fill(Color(red: 0.93, green: 0.89, blue: 0.80))
+                    surfaceLayer(corner: corner, width: width)
+                }
+                .padding(width * 0.022)
+                .offset(foilParallax)
+                // 内容层：标题/画框/文本（正向视差，出血由 0.045w 内边距覆盖）
                 VStack(spacing: geo.size.height * 0.012) {
                     titleBar(width: width)
                     artWindow(corner: corner, width: width)
@@ -712,8 +734,8 @@ struct MTGCardView<Art: View>: View {
                     textBoxView(width: width)
                 }
                 .padding(width * 0.045)
-                // 特效覆层
-                surfaceLayer(corner: corner, width: width)
+                .offset(contentParallax)
+                .clipShape(RoundedRectangle(cornerRadius: corner * 0.75))
             }
         }
         .aspectRatio(5.0 / 7.0, contentMode: .fit)
@@ -721,7 +743,6 @@ struct MTGCardView<Art: View>: View {
 
     // MARK: 覆层组合（范围 × 局部UV）
 
-    /// 整卡覆层：局部UV 开启 → 纹路/光泽避开画框（立绘哑光）；关闭 → 覆盖整卡
     private func surfaceLayer(corner: CGFloat, width: CGFloat) -> some View {
         Group {
             if fx.fullFace {
@@ -744,7 +765,6 @@ struct MTGCardView<Art: View>: View {
                         .padding(width * 0.008)
                 }
             } else {
-                // 仅边缘：纹路 + 光泽限制在边框描边内
                 HoloSurface(effect: fx)
                     .mask(RoundedRectangle(cornerRadius: corner)
                         .stroke(lineWidth: width * 0.026))
@@ -753,18 +773,16 @@ struct MTGCardView<Art: View>: View {
         .allowsHitTesting(false)
     }
 
-    /// 画框区域的矩形（供局部UV挖洞；与 artWindow 布局一致）
+    /// 画框区域的矩形（局部UV挖洞；含内容层视差同款偏移量由 mask 内吸收，保守不放）
     private func artCutout(width: CGFloat) -> some Shape {
         ArtCutoutShape(padding: width * 0.045,
                        verticals: verticalLayout(width: width))
     }
 
-    /// 竖向布局参数（标题栏高度估算 + 画框高度 + 间距，与 VStack 布局对齐）
     private func verticalLayout(width: CGFloat) -> (top: CGFloat, height: CGFloat) {
         let titleH = width * 0.118 + width * 0.024
         let spacing = width * 0.7 * 0.012
-        return (top: width * 0.045 + titleH + spacing,
-                height: width * 0.52)
+        return (top: width * 0.045 + titleH + spacing, height: width * 0.52)
     }
 
     // 标题栏：名称（烫印金属字）+ 费用徽章
@@ -773,8 +791,7 @@ struct MTGCardView<Art: View>: View {
             Text(name)
                 .font(.system(size: width * 0.052, weight: .bold, design: .serif))
                 .foregroundStyle(nameForeground)
-                .shadow(color: MetallicStamp.emboss.opacity(0.5),
-                        radius: 0.5, y: 0.8)
+                .shadow(color: MetallicStamp.emboss.opacity(0.5), radius: 0.5, y: 0.8)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             Spacer(minLength: 2)
@@ -848,7 +865,7 @@ struct MTGCardView<Art: View>: View {
     }
 }
 
-/// 画框挖洞形状（局部UV：立绘区不被覆层覆盖）
+/// 画框挖洞形状（局部UV）
 private struct ArtCutoutShape: Shape {
     var padding: CGFloat
     var verticals: (top: CGFloat, height: CGFloat)
@@ -862,10 +879,8 @@ private struct ArtCutoutShape: Shape {
     }
 }
 
-// MARK: - 调试实验台（卡牌特效组合的实时覆盖）
+// MARK: - 调试实验台（不变）
 
-/// 卡牌特效实验台：调试面板选择纹路×光泽组合，实时作用于角色页卡牌。
-/// 状态存 UserDefaults（仅本机调试，不入存档/不进 Widget）；enabled=false 时卡牌用档位默认。
 @MainActor
 final class HoloEffectLab: ObservableObject {
     static let shared = HoloEffectLab()
@@ -893,7 +908,6 @@ final class HoloEffectLab: ObservableObject {
         fullFace = defaults.object(forKey: kFullFace) as? Bool ?? true
     }
 
-    /// 角色卡取用的效果：未启用 → nil（按档位默认）
     var override: HoloCardEffect? {
         guard enabled else { return nil }
         return HoloCardEffect(pattern: pattern, glosses: glosses,
@@ -909,7 +923,7 @@ final class HoloEffectLab: ObservableObject {
     }
 }
 
-// MARK: - 调试档位覆盖（真机反馈第十九批：闪卡档位预览，本批起作用于 v2 特效组合）
+// MARK: - 调试档位覆盖（真机反馈第十九批：闪卡档位预览，作用于 v3 特效组合）
 
 extension HoloFoil {
     /// 调试档位覆盖（0 = 自动，1 = 普通，2 = 银边，3 = 金边，4 = 全彩）
@@ -935,4 +949,3 @@ extension HoloFoil {
         return debugOverride(raw) ?? equipment(rarity: rarity)
     }
 }
-

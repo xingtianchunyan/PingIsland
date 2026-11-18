@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 2026-11-18 holo-card v3（QwenWork 光学算法升级，单文件合入）
+- `Shared/HoloCardKit.swift` 替换为 v3 实现（调用方零改动，对外 API 不变）：
+  ① 时间动画 → 物理渲染：删除全部 phase 时间相位与 TimelineView，纹路/光泽成为视角纯函数
+  （固定光源 + 视角向量 + 微面元 N·H 镜面反射 + N·V 薄膜干涉色相）——静止 0fps 重绘省电；
+  ② Tone Mapping 过曝保护（softClip + 全息强度预算，修复 plusLighter 叠加死白）；
+  ③ SpecularLobe 镜面亮瓣 + lumaColor 恒定亮度色板（修复高光不扫动/方向同向）；
+  ④ 双层微视差：内容层 +3pt / 闪膜层 −2pt（立绘浮在闪膜上的封层感）；
+  ⑤ 金雨纪律：贴附水珠亮度改哈希固定值（删除时间闪烁项）
+- 移植时补回三处 v2 带有的兼容层（v3 包未含）：CardArt 立绘键解析、
+  HoloFoil 调试档位覆盖（effectiveCharacter/effectiveEquipment）、实验台 defaults 走共享容器
+- 已知边界：算法语义已经 Python 渲染数值验证（7/7，五姿态拼图）；SwiftUI 真机观感（帧率/手感）待真机确认
+
 ## 2026-11-10 真机反馈批次十一（第二十一批）：经验仅事件结算 + 装备外观倍率体系 + holo v2 移植 + 收藏三标签 + 卡面技能/连结/图鉴（Phase A/B）
 - 经验结算修正（行天："经验不应分两部分，只保留跟随事件结算的部分"）：
   删除每分钟固定 1 XP 成长；经验只来自半小时活动结算（3×骰点 XP），
